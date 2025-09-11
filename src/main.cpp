@@ -1,11 +1,12 @@
 #include <iostream>
 #include <string>
 #include <memory>
-#include "quasi_fs.h"
 
-using namespace vfs;
+#include "lib/include/quasi_fs.h"
 
-void printTree(const std::shared_ptr<Inode> &node, const std::string &name, int depth = 0)
+using namespace QuasiFS;
+
+void printTree(const inode_ptr &node, const std::string &name, int depth = 0)
 {
     std::string indent(depth * 2, ' ');
     std::string type = node->is_dir() ? "dir" : (node->is_file() ? "file" : "other");
@@ -31,12 +32,12 @@ void printTree(const std::shared_ptr<Inode> &node, const std::string &name, int 
 
 int main()
 {
-    VFS v;
+    QFS v;
 
     // mkdir /data i /var
-    auto datafs = FileSystem::Create();
-    auto devfs = FileSystem::Create();
-    auto varfs = FileSystem::Create();
+    auto datafs = Partition::Create();
+    auto devfs = Partition::Create();
+    auto varfs = Partition::Create();
 
     // datafs->mkdir(datafs->GetRoot(), "XD");
     // datafs->touch(datafs->GetRoot(), "lol.lol");
@@ -61,15 +62,14 @@ int main()
     v.mkdir("/var/asdasd/asdasd");
     v.touch("/var/asdasd/asdasd/hihi");
 
-
     printTree(v.GetRoot(), "/", 0);
 
-    auto sysfs = FileSystem::Create();
+    auto sysfs = Partition::Create();
     v.mount("/system", sysfs);
     v.touch("/system/456");
 
     // wydruk drzewa
-    std::cout << "=== VFS tree ===\n";
+    std::cout << "=== QFS tree ===\n";
     printTree(v.GetRoot(), "/", 0);
 
     v.unmount("/system");

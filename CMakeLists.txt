@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Nazwa projektu i standard
-project(projekt LANGUAGES CXX)
+project(quasi_fs LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -10,5 +10,9 @@ set(SOURCES
     src/main.cpp
 )
 
+add_subdirectory(src/lib)
+
 # Tworzymy plik wykonywalny
-add_executable(projekt ${SOURCES})
+add_executable(quasi_fs ${SOURCES})
+
+target_link_libraries(quasi_fs PRIVATE quasifs_lib)
