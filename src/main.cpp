@@ -2,8 +2,6 @@
 #include <string>
 #include <memory>
 #include "quasi_fs.h"
-#include "device_null.h"
-#include "device_stdout.h"
 
 using namespace vfs;
 
@@ -40,29 +38,42 @@ int main()
     auto devfs = FileSystem::Create();
     auto varfs = FileSystem::Create();
 
+    // datafs->mkdir(datafs->GetRoot(), "XD");
+    // datafs->touch(datafs->GetRoot(), "lol.lol");
+
+    // printTree(datafs->GetRoot(), "/data");
+    v.mkdir("/data");
+    v.mkdir("/dev");
+    v.mkdir("/var");
+    v.mkdir("/system");
+
+    v.touch("/system/123");
+
     v.mount("/data", datafs);
     v.mount("/dev", devfs);
     v.mount("/var", varfs);
 
-    // mount /dev
-    auto devdir = std::dynamic_pointer_cast<Directory>(devfs->GetRoot());
-    devdir->link("stdout", std::make_shared<StdoutDevice>());
-    devdir->link("null", std::make_shared<NullDevice>());
+    v.mkdir("/data/rtyrtyrty");
+    v.mkdir("/data/qweqwe");
+    v.touch("/data/XDFXDXDXD");
 
-    // dodaj plik do /var
-    auto varDir = std::dynamic_pointer_cast<Directory>(varfs->GetRoot());
-    varDir->link("log.txt", std::make_shared<RegularFile>());
+    v.mkdir("/var/asdasd");
+    v.mkdir("/var/asdasd/asdasd");
+    v.touch("/var/asdasd/asdasd/hihi");
 
-    auto dataDir = std::dynamic_pointer_cast<Directory>(datafs->GetRoot());
-    dataDir->link("XD", std::make_shared<Directory>());
-    dataDir->link("hihi.exe", std::make_shared<Directory>());
-    dataDir->link("chuj.log", std::make_shared<RegularFile>());
+
+    printTree(v.GetRoot(), "/", 0);
+
+    auto sysfs = FileSystem::Create();
+    v.mount("/system", sysfs);
+    v.touch("/system/456");
 
     // wydruk drzewa
     std::cout << "=== VFS tree ===\n";
-    printTree(v.resolve("/").node, "/", 0);
+    printTree(v.GetRoot(), "/", 0);
 
-    v.create("/dev/chuj");
+    v.unmount("/system");
+    printTree(v.GetRoot(), "/", 0);
 
     return 0;
 }
