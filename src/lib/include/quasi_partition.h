@@ -2,13 +2,11 @@
 
 #include <unordered_map>
 
-#include "quasi_inode.h"
-#include "quasi_inode_directory.h"
-#include "quasi_inode_regularfile.h"
+#include "quasi_types.h"
 
 namespace QuasiFS
 {
-
+    
     class Partition
     {
     public:
@@ -22,7 +20,7 @@ namespace QuasiFS
 
         dir_ptr GetRoot(void) { return this->root; };
         inode_ptr GetInode(fileno_t fileno);
-        blkid_t GetBlkid(void) { return this->block_id; };
+        blkid_t GetBlkId(void) { return this->block_id; };
 
         void IndexInode(inode_ptr node);
 

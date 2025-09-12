@@ -3,6 +3,10 @@
 #include <memory>
 
 #include "lib/include/quasi_fs.h"
+#include "lib/include/quasi_inode.h"
+#include "lib/include/quasi_inode_directory.h"
+#include "lib/include/quasi_inode_regularfile.h"
+#include "lib/include/quasi_partition.h"
 
 using namespace QuasiFS;
 

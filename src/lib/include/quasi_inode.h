@@ -10,6 +10,7 @@ namespace QuasiFS
     class Inode : std::enable_shared_from_this<Inode>
     {
     public:
+        Inode() = default;
         virtual ~Inode() = default;
 
         template <typename T, typename... Args>

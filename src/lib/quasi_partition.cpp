@@ -1,4 +1,7 @@
+#include "include/quasi_types.h"
 #include "include/quasi_partition.h"
+#include "include/quasi_inode_directory.h"
+#include "include/quasi_inode_regularfile.h"
 
 namespace QuasiFS
 {
@@ -44,7 +47,7 @@ namespace QuasiFS
     // create file at path (creates entry in parent dir). returns 0 or negative errno
     int Partition::touch(dir_ptr node, std::string leaf)
     {
-        return touch(node, std::make_shared<RegularFile>(), leaf);
+        return this->touch(node, std::make_shared<RegularFile>(), leaf);
     }
 
     int Partition::touch(dir_ptr node, file_ptr new_node, std::string leaf)
@@ -69,6 +72,7 @@ namespace QuasiFS
         if (node == nullptr)
             return -1;
 
+        // TODO: create . and .. here
         auto dir = std::static_pointer_cast<Directory>(node);
         int ret = dir->mkdir(leaf, new_node);
         if (ret == 0)

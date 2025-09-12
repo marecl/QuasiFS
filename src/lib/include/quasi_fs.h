@@ -2,12 +2,11 @@
 
 #include <unordered_map>
 
-
-#include "quasi_types.h"
 #include "quasi_partition.h"
 
 namespace QuasiFS
 {
+    
     // Very small QFS manager: path resolution, mount, create/unlink
     class QFS
     {
@@ -28,6 +27,7 @@ namespace QuasiFS
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         int touch(const fs::path &path);
         int mkdir(const fs::path &path);
+        // TODO: rmdir
 
         int unlink(const std::string &path);
         // mount fs at path (target must exist and be directory)

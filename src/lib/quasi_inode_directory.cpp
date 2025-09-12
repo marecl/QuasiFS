@@ -2,10 +2,14 @@
 #include <string>
 
 #include "include/quasi_types.h"
+
+#include "include/quasi_inode.h"
 #include "include/quasi_inode_directory.h"
 
 namespace QuasiFS
 {
+
+    Directory::Directory() { st.mode = 0040755; /* dir */ }
 
     inode_ptr Directory::lookup(const std::string &name)
     {

@@ -6,7 +6,7 @@
 
 namespace QuasiFS
 {
-
+    
     namespace fs = std::filesystem;
 
     using fileno_t = int64_t;
@@ -37,9 +37,9 @@ namespace QuasiFS
     // resolve path into (parent_dir, leaf_name, inode)
     struct Resolved
     {
-        partition_ptr mountpoint;
-        dir_ptr parent;
-        inode_ptr node; // nullptr if doesn't exist
-        std::string leaf;
+        partition_ptr mountpoint{};
+        dir_ptr parent{};
+        inode_ptr node{}; // nullptr if doesn't exist
+        std::string leaf{};
     };
 }

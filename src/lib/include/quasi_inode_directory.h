@@ -8,17 +8,17 @@
 
 namespace QuasiFS
 {
+    
     // Directory
     class Directory : public Inode
     {
-    private:
-        // if mounted_fs_root != nullptr, this directory is a mountpoint and resolution should go to mounted root
-
     public:
         std::map<std::string, inode_ptr> entries{};
         dir_ptr mounted_root = nullptr;
 
-        Directory() { st.mode = 0040755; /* dir */ }
+        Directory();
+        ~Directory() = default;
+
         bool is_dir() const override { return true; }
 
         int mkdir(const std::string &name, dir_ptr inode) override;

@@ -240,7 +240,7 @@ namespace vfs
             return (ret == inode_table.end()) ? nullptr : ret->second;
         }
 
-        blkid_t GetBlkid(void) { return this->block_id; };
+        blkid_t GetBlkId(void) { return this->block_id; };
 
         void IndexInode(inode_ptr node)
         {
