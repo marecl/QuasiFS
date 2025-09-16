@@ -114,8 +114,7 @@ namespace QuasiFS
         partition_ptr fsblk = res.mountpoint;
 
         dir_ptr dir = std::static_pointer_cast<Directory>(res.parent);
-        // zmienic na fsblk link
-        // return 0;
+
         return fsblk->touch(dir, res.leaf);
     }
 
@@ -210,6 +209,7 @@ namespace QuasiFS
             return -ENOTDIR;
 
         auto dir = std::static_pointer_cast<Directory>(res.parent);
+
         if (0 != dir->unlink(res.leaf))
             return -EINVAL;
 
@@ -243,8 +243,8 @@ namespace QuasiFS
             return -EEXIST;
 
         dir->mounted_root = fs->GetRoot();
-        this->block_devices[fs->GetBlkId()] = fs;
         res.mountpoint->fs_table[dir->GetFileno()] = fs;
+        this->block_devices[fs->GetBlkId()] = fs;
 
         return 0;
     }
@@ -272,8 +272,8 @@ namespace QuasiFS
             return -EINVAL;
 
         dir->mounted_root = nullptr;
-        this->block_devices.erase(res.mountpoint->GetBlkId());
         res.mountpoint->fs_table.erase(dir->GetFileno());
+        this->block_devices.erase(res.mountpoint->GetBlkId());
 
         return 0;
     }

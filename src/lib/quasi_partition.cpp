@@ -50,6 +50,9 @@ namespace QuasiFS
 
         for (auto part = path.begin(); part != path.end(); part++)
         {
+            if (part->empty() || *part == "/")
+                continue;
+
             std::string partstr = part->string();
 
             // current node doesn't exist
@@ -94,10 +97,12 @@ namespace QuasiFS
 
                 parent = dir;
                 current = parent->lookup(partstr);
+                r.leaf = partstr;
                 continue;
             }
         }
-
+        r.parent = parent;
+        r.node = current;
         return r;
     }
 

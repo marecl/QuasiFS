@@ -7,7 +7,7 @@
 namespace QuasiFS
 {
 
-    class Partition : std::enable_shared_from_this<Partition>
+    class Partition : public std::enable_shared_from_this<Partition>
     {
     private:
         fileno_t NextFileno(void) { return this->next_fileno++; };
