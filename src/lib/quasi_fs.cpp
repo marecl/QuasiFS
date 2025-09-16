@@ -16,174 +16,175 @@ namespace QuasiFS
         this->block_devices[this->rootfs->GetBlkId()] = this->rootfs;
     }
 
-    Resolved QFS::resolve(const fs::path &path)
+    int QFS::resolve(fs::path path, Resolved &r)
     {
-        auto is_symlink = this->symlink_table.find(path);
-        if (is_symlink != this->symlink_table.end())
+        // on return:
+        // node - last element of the path (if exists)
+        // parent - parent element of the path (if parent dir is 1 level above last element)
+        // mountpoint - target partition
+        // leaf - name of the last element in the path (if exists)
+
+        // guard against circular binds
+        uint8_t safety_counter = 40;
+        //
+        int status{-1};
+
+        r.mountpoint = this->rootfs;
+
+        do
         {
-            symlink_ptr sym = is_symlink->second;
-            return resolve(sym->follow());
-        }
+            status = r.mountpoint->resolve(path, r);
 
-        return this->rootfs->resolve(path);
+            if (0 != status)
+                return status;
 
-        // Resolved res{};
+            if (nullptr == r.node)
+                return -ENOENT;
 
-        // if (path.empty() || path.is_relative())
-        //     return res; // tylko ścieżki absolutne
+            if (r.node->is_link())
+            {
+                // symlink holds absolute path, so we need to start over.
+                // it may be a file or a directory, but if it's in the middle - it has to be a directory.
+                // when it's a part of the path, `resolve` returns null parent (it's unused anyways), and leaf is
+                // remaining (uniterated) path.
 
-        // res.mountpoint = this->rootfs;
-        // dir_ptr parent_inode = this->root;
-        // inode_ptr current_inode = this->root;
-        // std::string leaf{};
+                // for example, there are 2 paths:
+                // /dirA/dirB/dirC/file.txt
+                // /dirD/sym [sym to dirB]
+                // we open /dirD/sym/dirC/tile.txt, so base path is substituted with /dirA/dirB + /dirC/file.txt
+                // incorrect symlink will just throw -ENOTDIR
 
-        // for (auto it = path.begin(); it != path.end(); ++it)
-        // {
-        //     leaf = *it;
-        //     if (leaf.empty() || leaf == "/")
-        //         continue;
+                path = std::static_pointer_cast<Symlink>(r.node)->follow();
+                path /= r.leaf;
 
-        //     res.leaf = leaf;
+                r.mountpoint = this->rootfs;
+                r.parent = this->root;
+                r.node = this->root;
+                r.leaf = "/";
+                continue;
+            }
 
-        //     dir_ptr dir = std::dynamic_pointer_cast<Directory>(current_inode);
-        //     if (!dir)
-        //     {
-        //         // próbujemy iść w dół w pliku
-        //         res.parent = parent_inode;
-        //         res.node = current_inode;
-        //         return res;
-        //     }
+            if (r.node->is_dir())
+            {
+                dir_ptr mntparent = r.parent;
+                dir_ptr mntroot = mntparent->mounted_root;
 
-        //     // jeśli katalog jest mountpointem, delegujemy do mounted_root
-        //     if (dir->mounted_root)
-        //     {
-        //         auto mntpoint = this->fs_table.find(dir->GetFileno());
-        //         if (mntpoint == this->fs_table.end())
-        //             return {};
+                if (nullptr != mntroot)
+                {
+                    // nothing mounted
 
-        //         res.mountpoint = mntpoint->second;
-        //         parent_inode = mntpoint->second->GetRoot();
-        //     }
-        //     else
-        //     {
-        //         parent_inode = std::static_pointer_cast<Directory>(current_inode);
-        //     }
+                    // cross-partition resolution returns last-local directory, that holds the
+                    // mounted fs root directory. target fs is determined by mounted dir st.blk (ie. physical device).
+                    // here .leaf holds remainder of the path, that can be used as a starting point to iterate in new partition.
 
-        //     current_inode = dir->lookup(leaf);
-        //     if (std::next(it) == path.end())
-        //     {
-        //         // ostatni element ścieżki
-        //         res.parent = parent_inode;
-        //         res.leaf = leaf;
-        //         res.node = current_inode;
+                    auto mounted_blkdev = mntroot->getattr().dev;
+                    auto lookup_blkdev = this->block_devices.find(mounted_blkdev);
+                    if (lookup_blkdev == this->block_devices.end())
+                        // check - device not present. unmounted?
+                        return -ENOENT;
+                    partition_ptr mounted_partition = lookup_blkdev->second;
 
-        //         return res;
-        //     }
+                    r.mountpoint = mounted_partition;
+                    r.parent = mntparent;
+                    r.node = mntroot;
 
-        //     if (!current_inode)
-        //     {
-        //         // ścieżka nie istnieje
-        //         res.parent = nullptr;
-        //         res.node = nullptr;
+                    path = r.leaf;
+                    if (!path.empty())
+                        continue;
+                }
+            }
 
-        //         return res;
-        //     }
-        // }
+            break;
 
-        // // jeśli ścieżka to "/", zwracamy root
-        // res.parent = root;
-        // res.node = root;
-        // res.leaf = "/";
+        } while (--safety_counter > 0);
 
-        // return res;
+        if (0 == safety_counter)
+            return -ELOOP;
+
+        return 0;
     }
 
     // create file at path (creates entry in parent dir). returns 0 or negative errno
     int QFS::touch(const fs::path &path)
     {
-        Resolved res = resolve(path);
-        if (!res.parent)
-            return -ENOENT;
-        if (res.node)
-            return -EEXIST;
-        if (!res.parent->is_dir())
-            return -ENOTDIR;
-        if (!res.mountpoint)
-            return -ENOENT;
+        fs::path base = path.parent_path();
+        std::string fname = path.filename();
+
+        return touch(base, fname);
+    }
+
+    int QFS::touch(const fs::path &path, const std::string &name)
+    {
+        Resolved res{};
+        int ret = resolve(path, res);
+
+        if (0 != ret)
+            return ret;
 
         partition_ptr fsblk = res.mountpoint;
+        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
 
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.parent);
-
-        return fsblk->touch(dir, res.leaf);
+        return fsblk->touch(dir, name);
     }
 
     // Note: target may not exist and symlink will be created
-    int QFS::symlink(const fs::path symlink_location, const fs::path target)
+    int QFS::symlink(const fs::path path, const fs::path target)
     {
-        Resolved r = resolve(symlink_location);
-
-        if (!r.mountpoint)
-            return -ENOENT;
-        if (!r.parent)
-            return -ENOENT;
-        if (r.node)
-            // something exists in symlinks place
-            return -EEXIST;
-
-        auto exists = this->symlink_table.find(symlink_location);
-        if (exists == this->symlink_table.end())
-            // target file doesn;t exist
-            return -ENOENT;
-
-        symlink_ptr new_symlink = Inode::Create<Symlink>(target);
-
-        this->symlink_table[symlink_location] = new_symlink;
-
-        return 0;
+        return -EINVAL;
     }
 
     int QFS::mkdir(const fs::path &path)
     {
-        Resolved res = resolve(path);
-        if (!res.parent)
-            return -ENOENT;
-        if (res.node)
-            return -EEXIST;
-        if (!res.parent->is_dir())
+        fs::path base = path.parent_path();
+        std::string fname = path.filename();
+
+        return mkdir(base, fname);
+    }
+
+    int QFS::mkdir(const fs::path &path, const std::string &name)
+    {
+        Resolved res{};
+        int status = resolve(path, res);
+
+        if (0 != status)
+            return status;
+
+        if (!res.node->is_dir())
             return -ENOTDIR;
-        if (!res.mountpoint)
-            return -ENOENT;
 
         partition_ptr fsblk = res.mountpoint;
+        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
 
-        return fsblk->mkdir(res.parent, res.leaf);
+        return fsblk->mkdir(dir, name);
     }
 
     int QFS::rmdir(const fs::path &path)
     {
-        Resolved res = resolve(path);
-        if (!res.parent)
-            return -ENOENT;
-        if (!res.node)
-            return -ENOENT;
-        if (!res.parent->is_dir())
-            return -ENOTDIR;
-        if (!res.mountpoint)
-            return -ENOENT;
+        Resolved res{};
+        int status = resolve(path, res);
 
-        auto dir = std::static_pointer_cast<Directory>(res.parent);
+        if (0 != status)
+            return status;
 
-        if (res.parent->mounted_root)
+        dir_ptr parent = res.parent;
+
+        if (parent->mounted_root)
             return -EBUSY;
 
-        return dir->unlink(res.leaf);
+        return parent->unlink(res.leaf);
     }
 
     int QFS::link(const fs::path what, const fs::path where)
     {
-        Resolved sos = resolve(what);
-        Resolved tar = resolve(where);
+        Resolved sos{};
+        Resolved tar{};
+        int status_what = resolve(what, sos);
+        int status_where = resolve(where, tar);
+
+        if (0 != status_what)
+            return status_what;
+        if (0 != status_where)
+            return status_where;
 
         // cross-partition linking is not supported yet
         if (sos.mountpoint != tar.mountpoint)
@@ -200,42 +201,35 @@ namespace QuasiFS
 
     int QFS::unlink(const std::string &path)
     {
-        Resolved res = resolve(path);
-        if (!res.parent)
-            return -ENOENT;
-        if (!res.node)
-            return -ENOENT;
-        if (!res.parent->is_dir())
-            return -ENOTDIR;
+        Resolved res{};
+        int status = resolve(path, res);
 
-        auto dir = std::static_pointer_cast<Directory>(res.parent);
+        if (0 != status)
+            return status;
 
-        if (0 != dir->unlink(res.leaf))
-            return -EINVAL;
+        partition_ptr part = res.mountpoint;
+        dir_ptr dir = res.parent;
+        // inode_ptr target = res.node;
 
-        if (res.node->st.nlink != 0)
-            return 0;
-
-        // dunno
-        return -EINVAL;
+        return part->unlink(dir, res.leaf);
     }
 
     // mount fs at path (target must exist and be directory)
-    int QFS::mount(const fs::path &target_path, partition_ptr fs)
+    int QFS::mount(const fs::path &path, partition_ptr fs)
     {
         auto target_blkdev = this->block_devices.find(fs->GetBlkId());
         // already mounted
         if (target_blkdev != this->block_devices.end())
             return -EEXIST;
 
-        Resolved res = resolve(target_path);
+        Resolved res{};
+        int status = resolve(path, res);
 
-        if (!res.node)
-            return -ENOENT;
+        if (0 != status)
+            return status;
+
         if (!res.node->is_dir())
             return -ENOTDIR;
-        if (!res.mountpoint)
-            return -EINVAL;
 
         dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
 
@@ -243,36 +237,32 @@ namespace QuasiFS
             return -EEXIST;
 
         dir->mounted_root = fs->GetRoot();
-        res.mountpoint->fs_table[dir->GetFileno()] = fs;
         this->block_devices[fs->GetBlkId()] = fs;
 
         return 0;
     }
 
     // mount fs at path (target must exist and be directory)
-    int QFS::unmount(const fs::path &target_path)
+    int QFS::unmount(const fs::path &path)
     {
-        Resolved res = resolve(target_path);
-        if (!res.node)
-            return -ENOENT;
-        if (!res.node->is_dir())
-            return -ENOTDIR;
-        if (!res.mountpoint)
-            return -EINVAL;
+        Resolved res{};
+        int status = resolve(path, res);
+
+        if (0 != status)
+            return status;
 
         auto target_blkdev = this->block_devices.find(res.mountpoint->GetBlkId());
         if (target_blkdev == this->block_devices.end())
             // not mounted
             return -EINVAL;
 
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
+        dir_ptr dir = std::static_pointer_cast<Directory>(res.parent);
 
         if (nullptr == dir->mounted_root)
             // mounted but rootdir disappeared O.o
             return -EINVAL;
 
         dir->mounted_root = nullptr;
-        res.mountpoint->fs_table.erase(dir->GetFileno());
         this->block_devices.erase(res.mountpoint->GetBlkId());
 
         return 0;

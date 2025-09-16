@@ -14,9 +14,9 @@ namespace QuasiFS
         Symlink(fs::path target) : target(target)
         {
             // fileno and blkdev assigned by partition
-            this->st.nlink = 1;
             this->st.size = target.string().size();
             this->st.mode = 0000644 | S_IFLNK;
+            this->st.nlink = 0;
             // not incrementing target, this type is a softlink
         }
         ~Symlink() = default;

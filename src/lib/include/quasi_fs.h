@@ -21,8 +21,6 @@ namespace QuasiFS
         // std::vector<int,File*> open_handles;
 
         std::unordered_map<uint64_t, partition_ptr> block_devices{};
-        // symlinks. fictional symlink location, symlink containing target
-        std::unordered_map<fs::path, symlink_ptr> symlink_table{};
 
     public:
         QFS();
@@ -31,21 +29,26 @@ namespace QuasiFS
         inode_ptr GetRoot() { return std::static_pointer_cast<Inode>(this->root); }
         partition_ptr GetRootFS() { return std::static_pointer_cast<Partition>(this->rootfs); }
 
-        Resolved resolve(const fs::path &path);
+        int resolve(fs::path path, Resolved &r);
 
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         int touch(const fs::path &path);
+        int touch(const fs::path &path, const std::string &name);
+
+        int mkdir(const fs::path &path);
+        int mkdir(const fs::path &path, const std::string &name);
+
+        int rmdir(const fs::path &path);
+        int rmdir(const fs::path &path, const std::string &name);
+
         // what is linked where
         int symlink(const fs::path what, const fs::path where);
-        int mkdir(const fs::path &path);
-        int rmdir(const fs::path &path);
-
         int link(const fs::path what, const fs::path where);
         int unlink(const std::string &path);
         // mount fs at path (target must exist and be directory)
-        int mount(const fs::path &target_path, partition_ptr fs);
+        int mount(const fs::path &path, partition_ptr fs);
         // mount fs at path (target must exist and be directory)
-        int unmount(const fs::path &target_path);
+        int unmount(const fs::path &path);
     };
 
 };

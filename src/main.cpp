@@ -13,45 +13,6 @@
 
 using namespace QuasiFS;
 
-void printTree(const inode_ptr &node, const std::string &name, int depth = 0)
-{
-    std::string depEnt = "\t";
-    for (uint8_t q = 0; q < depth; q++)
-    {
-        depEnt = depEnt + "|--";
-    }
-    if (depth > 0)
-        depEnt[depEnt.length() - 1] = '>';
-
-    std::string type = node->is_dir() ? "[DIR]\t" : (node->is_file() ? "[FIL]\t" : "[OTH]\t");
-
-    if (!name.empty())
-        std::cout << type << std::format("[{:3d}] ", node->fileno) << depEnt << name << std::endl;
-    else
-        depth--;
-
-    if (name == ".")
-        return;
-    if (name == "..")
-        return;
-
-    if (node->is_dir())
-    {
-        auto dir = std::dynamic_pointer_cast<Directory>(node);
-        if (dir->mounted_root)
-        {
-            printTree(dir->mounted_root, "", depth + 1);
-        }
-        else
-        {
-            for (auto &[childName, child] : dir->entries)
-            {
-                printTree(child, childName, depth + 1);
-            }
-        }
-    }
-}
-
 int main()
 {
 
@@ -98,8 +59,7 @@ int main()
     // v.unmount("/system");
 
     QFS v;
-    v.mkdir("/XD");
-    // Test(v);
+    Test(v);
 
     Log("<<<< PRINTING FS TREE >>>>");
     printTree(v.GetRoot(), "/", 0);

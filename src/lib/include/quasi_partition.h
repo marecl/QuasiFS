@@ -22,9 +22,6 @@ namespace QuasiFS
         static inline blkid_t next_block_id = 1;
 
     public:
-        // for nested mountpoints
-        std::unordered_map<fileno_t, partition_ptr> fs_table{};
-
         Partition();
         ~Partition() = default;
 
@@ -37,29 +34,29 @@ namespace QuasiFS
         inode_ptr GetInode(fileno_t fileno);
         blkid_t GetBlkId(void) { return this->block_id; };
 
-        Resolved resolve(fs::path path);
+        int resolve(fs::path path, Resolved &r);
 
         bool IndexInode(inode_ptr node);
-        bool RemoveInode(inode_ptr node);
+        int rmInode(fileno_t target);
+        int rmInode(inode_ptr target);
 
         // create file at path (creates entry in parent dir). returns 0 or negative errno
-        int touch(dir_ptr node, std::string leaf);
-        int touch(dir_ptr node, file_ptr new_node, std::string leaf);
+        int touch(dir_ptr parent, const std::string &name);
+        int touch(dir_ptr parent, file_ptr child, const std::string &name);
 
         int rm(fileno_t fileno);
         int rm(fs::path path);
         int rm(inode_ptr node);
 
-        int mkdir(dir_ptr node, std::string leaf);
-        int mkdir(dir_ptr node, dir_ptr new_node, std::string leaf);
+        int mkdir(dir_ptr parent,  const std::string &name);
+        int mkdir(dir_ptr parent, dir_ptr new_node,  const std::string &name);
 
         int rmdir(fs::path path);
-        int rmdir(inode_ptr parent, std::string leaf);
+        int rmdir(dir_ptr parent,  const std::string &name);
 
-        int rmInode(fileno_t target);
-        int rmInode(inode_ptr target);
+        static void mkrelative(dir_ptr parent, dir_ptr child);
 
-        void mkrelative(dir_ptr parent, dir_ptr child);
+        int unlink(dir_ptr parent, std::string child);
     };
 
 };

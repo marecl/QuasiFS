@@ -26,84 +26,86 @@ namespace QuasiFS
         return (ret == inode_table.end()) ? nullptr : ret->second;
     }
 
-    Resolved Partition::resolve(fs::path path)
+    int Partition::resolve(fs::path path, Resolved &r)
     {
-        if (path.empty() || path.is_relative())
-            return {};
+        if (path.empty())
+            return -ENOENT;
 
-        Resolved r{};
-        r.mountpoint = shared_from_this();
-
-        if (path == "/")
-        {
-            r.parent = this->root;
-            r.node = this->root;
-            r.leaf = "/";
-            return r;
-        }
-
-        r.node = nullptr;
+        r.parent = this->root;
+        r.node = this->root;
         r.leaf = "";
 
         dir_ptr parent = this->root;
         inode_ptr current = this->root;
+
+        bool is_final = false;
 
         for (auto part = path.begin(); part != path.end(); part++)
         {
             if (part->empty() || *part == "/")
                 continue;
 
+            is_final = std::next(part) == path.end();
+
             std::string partstr = part->string();
 
-            // current node doesn't exist
-            if (nullptr == current)
-            {
-                r.parent = parent;
-                r.node = nullptr;
-                r.leaf = "";
-            }
+            // non-final element can't be anything other than a dir or link
+            if (!(current->is_link() || current->is_dir()) && !is_final)
+                return -ENOTDIR;
 
-            // file encountered at any point in time
-            if (current->is_file())
+            // link - return with mountpoint and remaining path
+            // to be resolved by superblock, just check if `node` is a link,
+            // resolve (based in root) symlink path + remainder
+            if (current->is_link())
             {
+                // Symlink can point to a directory
+                fs::path remainder = "";
+                for (auto p = std::next(part); p != path.end(); p++)
+                    remainder /= *p;
                 r.parent = parent;
                 r.node = current;
-                r.leaf = partstr;
-                return r;
+                r.leaf = remainder;
+                return 0;
             }
 
             if (current->is_dir())
             {
-                dir_ptr dir = std::dynamic_pointer_cast<Directory>(current);
-                if (dir->mounted_root != nullptr)
-                {
-                    fileno_t mountpoint_fileno = dir->mounted_root->GetFileno();
-                    auto target_partition = this->fs_table.find(mountpoint_fileno);
-                    if (target_partition == this->fs_table.end())
-                    {
-                        // linked partition not found
-                        r.parent = parent;
-                        r.node = nullptr;
-                        r.leaf = "";
-                        return r;
-                    }
-
-                    partition_ptr chain_part = target_partition->second;
-                    fs::path remainder;
-                    for (auto rem_part = std::next(part); rem_part != path.end(); ++rem_part)
-                        remainder /= *rem_part;
-                    return chain_part->resolve(remainder);
-                }
+                dir_ptr dir = std::static_pointer_cast<Directory>(current);
 
                 parent = dir;
-                current = parent->lookup(partstr);
+                current = dir->lookup(partstr);
                 r.leaf = partstr;
-                continue;
             }
+
+            // file not found in current directory, ENOENT
+            if (nullptr == current)
+                return -ENOENT;
+
+            // quick lookahead if this directory is a mountpoint
+            if (current->is_dir())
+            {
+                dir_ptr dir = std::static_pointer_cast<Directory>(current);
+                // same as symlink, if mountpoint is encountered, pass it on to superblock
+                if (dir->mounted_root != nullptr)
+                {
+                    fs::path remainder = "";
+                    for (auto p = std::next(part); p != path.end(); p++)
+                        remainder /= *p;
+
+                    r.parent = dir; // no point, unused in this context
+                    r.node = dir->mounted_root;
+                    r.leaf = remainder;
+
+                    return 0;
+                }
+            }
+
+            r.parent = parent;
+            r.node = current;
+            r.leaf = partstr;
         }
-        r.parent = parent;
-        r.node = current;
-        return r;
+
+        return 0;
     }
 
     bool Partition::IndexInode(inode_ptr node)
@@ -124,46 +126,49 @@ namespace QuasiFS
             if (dir->mounted_root)
                 IndexInode(dir->mounted_root);
         }
+
         node->st.ino = node_fileno;
         node->st.dev = block_id;
 
         return true;
     }
 
-    bool Partition::RemoveInode(inode_ptr node)
+    int Partition::rmInode(fileno_t target)
     {
-        if (!node)
-            return false;
-        fileno_t node_fileno = node->GetFileno();
-        if (node_fileno == -1)
-        {
-            // some other error, unindexed node
-            return false;
-        }
+        auto t = this->inode_table.find(target);
+        if (t == this->inode_table.end())
+            return -ENOENT;
+        return rmInode(t->second);
+    }
 
-        if (node->st.nlink > 1)
-            return false; // error, file in use
+    int Partition::rmInode(inode_ptr target)
+    {
+        if (nullptr == target)
+            return -ENOENT;
 
-        inode_table.erase(node_fileno);
+        if (0 != target->st.nlink)
+            return 0;
 
-        return true;
+        // TODO: nlink == 0, but check for open file handles, return -EEBUSY
+
+        this->inode_table.erase(target->GetFileno());
+        return 0;
     }
 
     // create file at path (creates entry in parent dir). returns 0 or negative errno
-    int Partition::touch(dir_ptr node, std::string leaf)
+    int Partition::touch(dir_ptr node, const std::string &name)
     {
-        return this->touch(node, Inode::Create<RegularFile>(), leaf);
+        return this->touch(node, Inode::Create<RegularFile>(), name);
     }
 
-    int Partition::touch(dir_ptr node, file_ptr new_node, std::string leaf)
+    int Partition::touch(dir_ptr parent, file_ptr child, const std::string &name)
     {
-        if (node == nullptr)
+        if (nullptr == parent)
             return -1;
 
-        auto dir = std::static_pointer_cast<Directory>(node);
-        auto ret = dir->link(new_node, leaf);
+        auto ret = parent->link(child, name);
         if (ret == 0)
-            IndexInode(new_node);
+            IndexInode(child);
         return ret;
     }
 
@@ -197,23 +202,22 @@ namespace QuasiFS
         return 0;
     }
 
-    int Partition::mkdir(dir_ptr node, std::string leaf)
+    int Partition::mkdir(dir_ptr parent, const std::string &name)
     {
-        return mkdir(node, Inode::Create<Directory>(), leaf);
+        return mkdir(parent, Inode::Create<Directory>(), name);
     }
 
-    int Partition::mkdir(dir_ptr node, dir_ptr new_node, std::string leaf)
+    int Partition::mkdir(dir_ptr parent, dir_ptr new_node, const std::string &name)
     {
-        if (node == nullptr)
+        if (nullptr == parent)
             return -1;
 
-        auto dir = std::dynamic_pointer_cast<Directory>(node);
-        int ret = dir->mkdir(leaf, new_node);
+        int ret = parent->mkdir(name, new_node);
 
         if (ret == 0)
             IndexInode(new_node);
 
-        auto real_parent = node->mounted_root ? node->mounted_root : node;
+        auto real_parent = parent->mounted_root ? parent->mounted_root : parent;
         mkrelative(real_parent, new_node);
 
         return ret;
@@ -221,34 +225,11 @@ namespace QuasiFS
 
     int Partition::rmdir(fs::path path)
     {
-        return 0;
+        return -EINVAL;
     }
-    int Partition::rmdir(inode_ptr parent, std::string leaf)
+    int Partition::rmdir(dir_ptr parent, const std::string &name)
     {
-        return 0;
-    }
-
-    int Partition::rmInode(fileno_t target)
-    {
-        auto t = this->inode_table.find(target);
-        if (t == this->inode_table.end())
-            return -ENOENT;
-        return rmInode(t->second);
-    }
-
-    int Partition::rmInode(inode_ptr target)
-    {
-        if (target == nullptr)
-            return -ENOENT;
-
-        auto nlink = &target->st.nlink;
-        *nlink = *nlink == 1 ? 0 : (*nlink)--;
-
-        if (*nlink != 0)
-            return -EBUSY;
-
-        this->inode_table.erase(target->GetFileno());
-        return 0;
+        return -EINVAL;
     }
 
     void Partition::mkrelative(dir_ptr parent, dir_ptr child)
@@ -257,4 +238,16 @@ namespace QuasiFS
         child->link(parent, "..");
     }
 
+    int Partition::unlink(dir_ptr parent, std::string child)
+    {
+        inode_ptr target = parent->lookup(child);
+        if (nullptr == target)
+            return -ENOENT;
+
+        int status = parent->unlink(child);
+        if (0 != status)
+            return status;
+
+        return rmInode(target);
+    }
 };

@@ -32,9 +32,6 @@ namespace QuasiFS
         if (nullptr == inode)
             return -ENOENT;
 
-        if (inode->is_dir())
-            return -EPERM;
-
         // if (mounted_root)
         // {
         //     return mounted_root->link(inode, name);
