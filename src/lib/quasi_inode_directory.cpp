@@ -1,9 +1,6 @@
 #include <map>
 #include <string>
 
-#include "include/quasi_types.h"
-
-#include "include/quasi_inode.h"
 #include "include/quasi_inode_directory.h"
 
 namespace QuasiFS
@@ -17,10 +14,6 @@ namespace QuasiFS
 
     inode_ptr Directory::lookup(const std::string &name)
     {
-        // if (mounted_root)
-        // {
-        //     return mounted_root->lookup(name);
-        // }
         auto it = entries.find(name);
         if (it == entries.end())
             return nullptr;
@@ -32,11 +25,6 @@ namespace QuasiFS
         if (nullptr == inode)
             return -ENOENT;
 
-        // if (mounted_root)
-        // {
-        //     return mounted_root->link(inode, name);
-        // }
-
         if (entries.count(name))
             return -EEXIST;
         entries[name] = inode;
@@ -47,35 +35,26 @@ namespace QuasiFS
 
     int Directory::unlink(const std::string &name)
     {
-        // if (mounted_root)
-        // {
-        //     return mounted_root->unlink(name);
-        // }
-
         auto it = entries.find(name);
         if (it == entries.end())
             return -ENOENT;
         // if directory and not empty -> EBUSY or ENOTEMPTY
         if (it->second->is_dir())
         {
-            auto children = it->second->list();
+            dir_ptr dir = std::static_pointer_cast<Directory>(it->second);
+            auto children = dir->list();
             children.erase(std::remove(children.begin(), children.end(), "."), children.end());
             children.erase(std::remove(children.begin(), children.end(), ".."), children.end());
             if (!children.empty())
                 return -ENOTEMPTY;
         }
-        auto nlink = &it->second->st.nlink;
-        *nlink = (it->second->st.nlink > 0) ? it->second->st.nlink - 1 : 0;
+
         entries.erase(it);
         return 0;
     }
 
     std::vector<std::string> Directory::list()
     {
-        // if (mounted_root)
-        // {
-        //     return mounted_root->list();
-        // }
         std::vector<std::string> r;
         for (auto &p : entries)
             r.push_back(p.first);
@@ -84,14 +63,9 @@ namespace QuasiFS
 
     int Directory::mkdir(const std::string &name, dir_ptr inode)
     {
-        // if (mounted_root)
-        // {
-        //     return mounted_root->mkdir(name, inode);
-        // }
         if (entries.count(name))
             return -EEXIST;
         entries[name] = inode;
-        inode->st.nlink++;
         return 0;
     }
 

@@ -1,7 +1,5 @@
 #include <cstring>
 
-#include "include/quasi_types.h"
-#include "include/quasi_inode.h"
 #include "include/quasi_inode_regularfile.h"
 
 namespace QuasiFS

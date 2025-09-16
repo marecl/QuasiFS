@@ -146,9 +146,6 @@ namespace QuasiFS
         if (nullptr == target)
             return -ENOENT;
 
-        if (0 != target->st.nlink)
-            return 0;
-
         // TODO: nlink == 0, but check for open file handles, return -EEBUSY
 
         this->inode_table.erase(target->GetFileno());
@@ -234,8 +231,8 @@ namespace QuasiFS
 
     void Partition::mkrelative(dir_ptr parent, dir_ptr child)
     {
-        child->link(child, ".");
-        child->link(parent, "..");
+        child->entries["."] = child;
+        child->entries[".."] = parent;
     }
 
     int Partition::unlink(dir_ptr parent, std::string child)

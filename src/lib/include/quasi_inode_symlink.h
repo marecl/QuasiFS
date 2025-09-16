@@ -11,28 +11,11 @@ namespace QuasiFS
         const fs::path target;
 
     public:
-        Symlink(fs::path target) : target(target)
-        {
-            // fileno and blkdev assigned by partition
-            this->st.size = target.string().size();
-            this->st.mode = 0000644 | S_IFLNK;
-            this->st.nlink = 0;
-            // not incrementing target, this type is a softlink
-        }
+        Symlink(fs::path target);
         ~Symlink() = default;
 
-        fs::path follow(void)
-        {
-            return target;
-        }
-
-        // if inode is invalid, return symlink stat
-        Stat getattr(inode_ptr inode)
-        {
-            if (nullptr == inode)
-                return this->st;
-            return inode->st;
-        }
+        fs::path follow(void);
+        Stat getattr(inode_ptr inode);
     };
 
 }

@@ -8,7 +8,7 @@ using namespace QuasiFS;
 void _printTree(const inode_ptr &node, const std::string &name, int depth)
 {
 
-    std::string depEnt = "\t";
+    std::string depEnt = "";
     for (uint8_t q = 0; q < depth; q++)
     {
         depEnt = depEnt + "|--";
@@ -93,6 +93,7 @@ void Test(QFS &qfs)
     TestMkRmdir(qfs);
     TestMount(qfs);
     TestMountFileRetention(qfs);
+    TestStLink(qfs);
 
     Log("");
     Log("Tests complete");
@@ -194,8 +195,8 @@ void TestMount(QFS &qfs)
     }
 
     auto parent_from_root = r.parent->lookup("mount")->GetFileno();
-    auto self_fileno = r.node->lookup(".")->GetFileno();
-    auto parent_fileno = r.node->lookup("..")->GetFileno();
+    auto self_fileno = std::static_pointer_cast<Directory>(r.node)->lookup(".")->GetFileno();
+    auto parent_fileno = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
 
     Log("Pre-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root, parent_fileno, self_fileno);
 
@@ -218,11 +219,11 @@ void TestMount(QFS &qfs)
     }
 
     status = qfs.resolve("/dummy", r);
-    auto parent_from_root_mount = r.node->lookup("mount")->GetFileno();
+    auto parent_from_root_mount =std::static_pointer_cast<Directory>( r.node)->lookup("mount")->GetFileno();
 
     status = qfs.resolve("/dummy/mount", r);
-    auto self_fileno_mount = r.node->lookup(".")->GetFileno();
-    auto parent_fileno_mount = r.node->lookup("..")->GetFileno();
+    auto self_fileno_mount = std::static_pointer_cast<Directory>( r.node)->lookup(".")->GetFileno();
+    auto parent_fileno_mount = std::static_pointer_cast<Directory>( r.node)->lookup("..")->GetFileno();
 
     Log("Post-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root_mount, parent_fileno_mount, self_fileno_mount);
 

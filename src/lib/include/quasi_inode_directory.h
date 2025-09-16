@@ -8,7 +8,7 @@
 
 namespace QuasiFS
 {
-    
+
     // Directory
     class Directory : public Inode
     {
@@ -19,16 +19,16 @@ namespace QuasiFS
         Directory();
         ~Directory() = default;
 
-        int mkdir(const std::string &name, dir_ptr inode) override;
+        int mkdir(const std::string &name, dir_ptr inode);
         // add rmdir
 
-        inode_ptr lookup(const std::string &name) override;
+        inode_ptr lookup(const std::string &name);
 
-        int link(inode_ptr inode, const std::string &name) override;
-        int unlink(const std::string &name) override;
+        int link(inode_ptr inode, const std::string &name);
+        int unlink(const std::string &name);
 
-        std::vector<std::string> list() override;
-        Stat getattr() override;
+        std::vector<std::string> list();
+        Stat getattr();
     };
 
 }

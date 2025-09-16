@@ -3,6 +3,7 @@ add_library(quasifs_lib
     quasi_fs.cpp
     quasi_inode_directory.cpp
     quasi_inode_regularfile.cpp
+    quasi_inode_symlink.cpp
     quasi_partition.cpp    
     )
 

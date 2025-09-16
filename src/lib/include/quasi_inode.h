@@ -26,13 +26,6 @@ namespace QuasiFS
         virtual ssize_t write(off_t /*offset*/, const void * /*buf*/, size_t /*count*/) { return -ENOSYS; }
         virtual int truncate(off_t /*length*/) { return -ENOSYS; }
 
-        // dir-like
-        virtual inode_ptr lookup(const std::string & /*name*/) { return nullptr; }
-        virtual int link(inode_ptr /*inode*/, const std::string & /*name*/) { return -ENOSYS; }
-        virtual int unlink(const std::string & /*name*/) { return -ENOSYS; }
-        virtual std::vector<std::string> list() { return {}; }
-        virtual int mkdir(const std::string & /*name*/, dir_ptr inode /* directory */) { return -ENOSYS; }
-
         // metadata
         virtual Stat getattr() { return st; }
 
