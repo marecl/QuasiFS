@@ -19,8 +19,6 @@ namespace QuasiFS
         Directory();
         ~Directory() = default;
 
-        bool is_dir() const override { return true; }
-
         int mkdir(const std::string &name, dir_ptr inode) override;
         // add rmdir
 

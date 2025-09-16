@@ -6,7 +6,7 @@
 
 namespace QuasiFS
 {
-    
+
     namespace fs = std::filesystem;
 
     using fileno_t = int64_t;
@@ -20,6 +20,8 @@ namespace QuasiFS
     using partition_ptr = std::shared_ptr<Partition>;
     class RegularFile;
     using file_ptr = std::shared_ptr<RegularFile>;
+    class Symlink;
+    using symlink_ptr = std::shared_ptr<Symlink>;
     class Directory;
     using dir_ptr = std::shared_ptr<Directory>;
 

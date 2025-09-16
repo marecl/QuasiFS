@@ -7,9 +7,11 @@
 namespace QuasiFS
 {
 
-    RegularFile::RegularFile() { st.mode = 0100644; /* regular file */ }
-
-    bool RegularFile::is_file() const { return true; }
+    RegularFile::RegularFile()
+    {
+        st.mode = 0000644 | S_IFREG;
+        st.nlink = 0;
+    }
 
     ssize_t RegularFile::read(off_t offset, void *buf, size_t count)
     {

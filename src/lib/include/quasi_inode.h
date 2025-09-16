@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <sys/stat.h>
 #include "quasi_types.h"
 
 namespace QuasiFS
@@ -16,6 +17,7 @@ namespace QuasiFS
         template <typename T, typename... Args>
         static std::shared_ptr<T> Create(Args &&...args)
         {
+            static_assert(std::is_base_of<Inode, T>::value, "T must derive from Inode");
             return std::make_shared<T>(std::forward<Args>(args)...);
         }
 
@@ -35,8 +37,11 @@ namespace QuasiFS
         virtual Stat getattr() { return st; }
 
         // type helpers
-        virtual bool is_dir() const { return false; }
-        virtual bool is_file() const { return false; }
+        int type() const { return st.mode & S_IFMT; }
+        bool is_file() const { return type() == S_IFREG; }
+        bool is_dir() const { return type() == S_IFDIR; }
+        bool is_link() const { return type() == S_IFLNK; }
+        bool is_char() const { return type() == S_IFCHR; }
 
         fileno_t GetFileno(void) { return this->fileno; }
         fileno_t SetFileno(fileno_t fileno)
@@ -45,8 +50,8 @@ namespace QuasiFS
             return fileno;
         };
 
-        fileno_t fileno = -1;
-        Stat st;
+        fileno_t fileno{-1};
+        Stat st{};
     };
 
 }

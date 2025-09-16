@@ -222,7 +222,7 @@ namespace vfs
     public:
         FileSystem() : block_id(next_block_id++)
         {
-            this->root = std::make_shared<Directory>();
+            this->root = Inode::Create<Directory>();
             IndexInode(this->root);
         };
         ~FileSystem() = default;
