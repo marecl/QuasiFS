@@ -61,39 +61,36 @@ void printTree(const inode_ptr &node, const std::string &name, int depth = 0)
     _printTree(node, name, depth);
 }
 
+// Inode manip
 void TestTouchUnlinkFile(QFS &qfs);
 void TestMkRmdir(QFS &qfs);
+
+// Mounts (partitions)
 void TestMount(QFS &qfs);
 void TestMountFileRetention(QFS &qfs);
+
+// Links
 void TestStLinkFile(QFS &qfs);
+void TestStLinkDir(QFS &qfs) { LogTest("Unimplemented"); };
+void TestStLinkMixed(QFS &qfs) { LogTest("Unimplemented"); };
 
-void TestStLinkDir(QFS &qfs) {};
-void TestStLinkMixed(QFS &qfs) {};
+// Symlinks
+// TODO
 
-void TestFileOpen(QFS &qfs)
-{
-    LogTest("Opening / closing files");
-
-    qfs.touch("/file_open");
-
-    int fd = qfs.open("/file_open", 0);
-    if (fd < 0)
-    {
-        LogError("open() returned error: {}", fd);
-        return;
-    }
-
-    if (int status = qfs.close(fd); status != 0)
-        LogError("close() returned error: {}", status);
-}
-
+// Files (I/O)
+void TestFileOpen(QFS &qfs);
 void TestFileops(QFS &qfs)
 {
-    // LogTest("File R/W");
+    LogTest("File R/W");
 
-    // qfs.touch("/file_open");
+    if (int status = qfs.open("/fileop_open", 0); -ENOENT != status)
+        LogError("Unexpected return on opening nonexistent file: {}", status);
 
-    // int fd = qfs.open("/file_open", O_RDWR);
+    //
+    qfs.touch("/fileop_open");
+    //
+
+    // int fd = qfs.open("/fileop_open", O_RDWR);
     // if (fd < 0)
     // {
     //     LogError("open() returned error: {}", fd);
@@ -109,30 +106,39 @@ void TestFileops(QFS &qfs)
     // qfs.close(fd);
 }
 
+// Directories (I/O)
+void TestDirOpen(QFS &qfs);
+void TestDirops(QFS &qfs) { LogTest("Unimplemented"); };
+
 void Test(QFS &qfs)
 {
     Log("");
     Log("QuasiFS Test Suite");
     Log("");
 
-    // file manip
+    // Inode manip
     TestTouchUnlinkFile(qfs);
     TestMkRmdir(qfs);
 
-    // mounts (partitions)
+    // Mounts (partitions)
     TestMount(qfs);
     TestMountFileRetention(qfs);
 
-    // links
+    // Links
     TestStLinkFile(qfs);
     TestStLinkDir(qfs);
     TestStLinkMixed(qfs);
 
-    // Files
+    // Symlinks
+    // TODO
+
+    // Files (I/O)
     TestFileOpen(qfs);
     TestFileops(qfs);
 
-    // symlinks
+    // Directories (I/O)
+    TestDirOpen(qfs);
+    TestDirops(qfs);
 
     Log("");
     Log("Tests complete");
@@ -443,7 +449,7 @@ void TestStLinkFile(QFS &qfs)
         LogError("New file link {} != 1", *nlink);
     }
     else
-        LogSuccess("Created new file with st_nlink={}", *nlink);
+        LogSuccess("Created new file. nlink=1", *nlink);
 
     if (int status = qfs.link("/file", "/file2"); 0 != status)
     {
@@ -457,7 +463,7 @@ void TestStLinkFile(QFS &qfs)
         LogError("New file link {} != 2", *nlink);
     }
     else
-        LogSuccess("New file nlink==2");
+        LogSuccess("nlink=2");
 
     if (int status = qfs.unlink("/file"); 0 != status)
     {
@@ -470,16 +476,22 @@ void TestStLinkFile(QFS &qfs)
     {
         LogError("New file link {} != 1", *nlink);
     }
+    else
+        LogSuccess("nlink=1");
 
     if (int status = qfs.unlink("/file2"); 0 != status)
     {
         LogError("Unlink new-linked file failed: {}", status);
     }
+    else
+        LogSuccess("File unlinked");
 
     if (*nlink != 0)
     {
         LogError("New file link {} != 0", *nlink);
     }
+    else
+        LogSuccess("nlink=1");
 
     inode_ptr readback = qfs.GetRootFS()->GetInode(f->GetFileno());
 
@@ -487,4 +499,105 @@ void TestStLinkFile(QFS &qfs)
     {
         LogError("inode wasn't erased from partition after removing all links");
     }
+}
+
+void TestFileOpen(QFS &qfs)
+{
+    LogTest("File open/close");
+
+    Resolved r{};
+
+    if (int status = qfs.open("/file_open", 0); -ENOENT == status)
+    {
+        LogSuccess("nonexistent file, O_READ");
+        qfs.close(status);
+    }
+    else
+        LogError("O_READ, nonexistent file: {}", status);
+
+    if (int status = qfs.open("/file_open", O_CREAT); 0 == status)
+    {
+        LogSuccess("nonexistent file, O_READ | O_CREAT");
+        qfs.close(status);
+    }
+    else
+        LogError("O_READ | O_CREAT, nonexistent file: {}", status);
+
+    //
+    if (-ENOENT == qfs.resolve("/file_open", r))
+        LogError("O_CREAT didn't create the file");
+    //
+
+    if (int status = qfs.open("/file_open", O_RDWR); 0 == status)
+    {
+        LogSuccess("existing file, O_RDWR");
+        qfs.close(status);
+    }
+    else
+        LogError("O_RDWR, existing file: {}", status);
+
+    // Edge case - undefined in POSIX
+    // We can open the file for reading only and truncate it anyway
+    if (int status = qfs.open("/file_open", O_RDONLY | O_TRUNC); 0 == status)
+    {
+        LogSuccess("existing file, O_RDONLY | O_TRUNC");
+        qfs.close(status);
+    }
+    else
+        LogError("O_RDONLY | O_TRUNC, existing file: {}", status);
+}
+
+void TestDirOpen(QFS &qfs)
+{
+    LogTest("Dir open/close");
+
+    Resolved r{};
+
+    if (int status = qfs.open("/dir_open", O_DIRECTORY); -ENOENT == status)
+    {
+        LogSuccess("nonexistent dir, O_READ | O_DIRECTORY");
+        qfs.close(status);
+    }
+    else
+        LogError("nonexistent dir, O_READ | O_DIRECTORY: {}", status);
+
+    if (int status = qfs.open("/dir_open", O_DIRECTORY | O_WRONLY); -ENOENT == status)
+    {
+        LogSuccess("nonexistent dir, O_WRONLY | O_DIRECTORY");
+        qfs.close(status);
+    }
+    else
+        LogError("nonexistent dir, O_WRONLY | O_DIRECTORY: {}", status);
+
+    //
+    qfs.mkdir("/dir_open");
+    //
+
+    if (int status = qfs.open("/dir_open", O_DIRECTORY); 0 == status)
+    {
+        LogSuccess("existing dir, O_RDONLY | O_DIRECTORY");
+        qfs.close(status);
+    }
+    else
+        LogError("existing dir, O_RDONLY | O_DIRECTORY: {}", status);
+
+    if (int status = qfs.open("/dir_open", 0); 0 == status)
+    {
+        LogSuccess("existing dir, O_RDONLY");
+        qfs.close(status);
+    }
+    else
+        LogError("existing dir, O_RDONLY: {}", status);
+
+    //
+    qfs.touch("/notadir");
+    //
+
+    if (int status = qfs.open("/notadir", O_DIRECTORY); -ENOTDIR == status)
+    {
+        LogSuccess("not a dir, O_DIRECTORY");
+        qfs.close(status);
+    }
+    else
+        LogError("not a dir, O_DIRECTORY: {}", status);
 }

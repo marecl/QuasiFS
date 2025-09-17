@@ -35,6 +35,7 @@ namespace QuasiFS
         r.node = this->root;
         r.leaf = "";
 
+        // these hold up between iterations, but setting them can be ignored if the function is about to returnI
         dir_ptr parent = r.parent;
         inode_ptr current = r.node;
 
@@ -74,19 +75,17 @@ namespace QuasiFS
             if (current->is_dir())
             {
                 dir_ptr dir = std::static_pointer_cast<Directory>(current);
-
                 parent = dir;
                 current = dir->lookup(partstr);
+
+                r.parent = parent;
+                r.node = current;
                 r.leaf = partstr;
             }
 
             // file not found in current directory, ENOENT
-            if (nullptr == current)
+            if (nullptr == r.node)
                 return -ENOENT;
-
-            r.parent = parent;
-            r.node = current;
-            r.leaf = partstr;
 
             // quick lookahead if this directory is a mountpoint
             if (current->is_dir())

@@ -116,22 +116,60 @@ namespace QuasiFS
     {
         Resolved r{};
         int status = resolve(path, r);
+        inode_ptr target = r.node;
+        bool exists = (-ENOENT != status) && target;
 
-        if (-ENOENT == status)
-            if ((flags & O_CREAT) == 0)
-                this->touch(path);
-        if (-ENOENT != status)
+        // check for RO!
+
+        if (exists && (flags & O_EXCL) && (flags & O_CREAT))
+            return -EEXIST;
+
+        if (!exists)
         {
-            if (flags & O_EXCL)
-                return -EEXIST;
-            if (0 != status)
-                return status;
+            if ((flags & O_CREAT) == 0)
+                return -ENOENT;
+
+            this->touch(path);
+            target = r.parent->lookup(r.leaf);
+            if (nullptr == target)
+                // touch failed in target directory, issue with resolve() most likely
+                return -EFAULT;
+        }
+
+        if (flags & O_TRUNC)
+        {
+            if (target->is_file())
+                std::static_pointer_cast<RegularFile>(target)->truncate(0);
+            else if (target->is_dir())
+                return -EISDIR;
+            else
+                return -EINVAL;
+        }
+
+        // if exists and is a directory, can't be opened with any kind of write
+        if (exists && (target->is_dir() || (flags & O_DIRECTORY)) && (flags & (O_TRUNC | O_RDWR | O_WRONLY)))
+            return -EISDIR;
+
+        if ((flags & O_DIRECTORY) && !target->is_dir())
+            // opening dirs isn't supported yet
+            return -ENOTDIR;
+
+        if (flags & (O_APPEND | O_NOFOLLOW | O_PATH /* | O_TMPFILE */))
+        {
+            // O_TMPFILE expansion includes O_DIRECTORY
+            // not implemented
+            return -EINVAL;
+        }
+
+        if (flags & (O_NONBLOCK | O_SYNC | O_ASYNC | O_CLOEXEC | O_DIRECT | O_DSYNC | O_LARGEFILE | O_NOATIME | O_NOCTTY))
+        {
+            // unused
         }
 
         auto next_free_handle = this->GetFreeHandleNo();
         fd_handle_ptr handle = File::Create();
 
-        handle->node = r.node;
+        handle->node = target;
         handle->read = flags & O_WRONLY ? false : true;
         handle->write = flags & O_WRONLY ? true : (flags & O_RDWR);
 
@@ -185,6 +223,29 @@ namespace QuasiFS
         if (target->is_file())
             return std::static_pointer_cast<RegularFile>(target)->read(offset, buf, count);
         // TODO: remaining types
+        return -EBADF;
+    }
+
+    int QFS::truncate(const fs::path &path, off_t length)
+    {
+        Resolved r{};
+        int status = resolve(path, r);
+        if (0 != status)
+            return status;
+        if (r.node->is_file())
+            return std::static_pointer_cast<RegularFile>(r.node)->truncate(length);
+        return -EINVAL;
+    }
+
+    int QFS::ftruncate(int fd, off_t length)
+    {
+        if (0 > fd || fd >= this->open_fd.size())
+            return -EBADF;
+        fd_handle_ptr handle = this->open_fd.at(fd);
+        inode_ptr target = handle->node;
+
+        if (target->is_file())
+            return std::static_pointer_cast<RegularFile>(target)->truncate(length);
         return -EBADF;
     }
 

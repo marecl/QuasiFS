@@ -16,6 +16,7 @@ namespace QuasiFS
 
         ssize_t read(off_t offset, void *buf, size_t count) override;
         ssize_t write(off_t offset, const void *buf, size_t count) override;
+        int truncate(off_t length) { return -ENOSYS; }
     };
 
 }
