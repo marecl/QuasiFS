@@ -26,7 +26,7 @@ namespace QuasiFS
         return (ret == inode_table.end()) ? nullptr : ret->second;
     }
 
-    int Partition::resolve(fs::path path, Resolved &r)
+    int Partition::resolve(fs::path &path, Resolved &r)
     {
         if (path.empty())
             return -ENOENT;
@@ -35,19 +35,20 @@ namespace QuasiFS
         r.node = this->root;
         r.leaf = "";
 
-        dir_ptr parent = this->root;
-        inode_ptr current = this->root;
+        dir_ptr parent = r.parent;
+        inode_ptr current = r.node;
 
         bool is_final = false;
 
+        std::string pathstr = path.string();
         for (auto part = path.begin(); part != path.end(); part++)
         {
+
+            std::string partstr = part->string();
             if (part->empty() || *part == "/")
                 continue;
 
             is_final = std::next(part) == path.end();
-
-            std::string partstr = part->string();
 
             // non-final element can't be anything other than a dir or link
             if (!(current->is_link() || current->is_dir()) && !is_final)
@@ -62,9 +63,11 @@ namespace QuasiFS
                 fs::path remainder = "";
                 for (auto p = std::next(part); p != path.end(); p++)
                     remainder /= *p;
+                path = remainder;
+
                 r.parent = parent;
                 r.node = current;
-                r.leaf = remainder;
+                r.leaf = partstr;
                 return 0;
             }
 
@@ -81,6 +84,10 @@ namespace QuasiFS
             if (nullptr == current)
                 return -ENOENT;
 
+            r.parent = parent;
+            r.node = current;
+            r.leaf = partstr;
+
             // quick lookahead if this directory is a mountpoint
             if (current->is_dir())
             {
@@ -91,18 +98,15 @@ namespace QuasiFS
                     fs::path remainder = "";
                     for (auto p = std::next(part); p != path.end(); p++)
                         remainder /= *p;
+                    path = remainder;
 
                     r.parent = dir; // no point, unused in this context
                     r.node = dir->mounted_root;
-                    r.leaf = remainder;
+                    r.leaf = partstr;
 
                     return 0;
                 }
             }
-
-            r.parent = parent;
-            r.node = current;
-            r.leaf = partstr;
         }
 
         return 0;
@@ -158,15 +162,15 @@ namespace QuasiFS
     // create file at path (creates entry in parent dir). returns 0 or negative errno
     int Partition::touch(dir_ptr node, const std::string &name)
     {
-        return this->touch(node, Inode::Create<RegularFile>(), name);
+        return this->touch(node, name, Inode::Create<RegularFile>());
     }
 
-    int Partition::touch(dir_ptr parent, file_ptr child, const std::string &name)
+    int Partition::touch(dir_ptr parent, const std::string &name, file_ptr child)
     {
         if (nullptr == parent)
             return -1;
 
-        auto ret = parent->link(child, name);
+        auto ret = parent->link(name, child);
         if (ret == 0)
             IndexInode(child);
         return ret;
@@ -204,21 +208,21 @@ namespace QuasiFS
 
     int Partition::mkdir(dir_ptr parent, const std::string &name)
     {
-        return mkdir(parent, Inode::Create<Directory>(), name);
+        return mkdir(parent, name, Inode::Create<Directory>());
     }
 
-    int Partition::mkdir(dir_ptr parent, dir_ptr new_dir, const std::string &name)
+    int Partition::mkdir(dir_ptr parent, const std::string &name, dir_ptr child)
     {
         if (nullptr == parent)
             return -1;
 
-        int ret = parent->mkdir(new_dir, name);
+        int ret = parent->mkdir(name, child);
 
         if (ret == 0)
-            IndexInode(new_dir);
+            IndexInode(child);
 
         auto real_parent = parent->mounted_root ? parent->mounted_root : parent;
-        mkrelative(real_parent, new_dir);
+        mkrelative(real_parent, child);
 
         return ret;
     }
@@ -234,11 +238,11 @@ namespace QuasiFS
 
     void Partition::mkrelative(dir_ptr parent, dir_ptr child)
     {
-        child->mkdir(child, ".");
-        child->mkdir(parent, "..");
+        child->mkdir(".", child);
+        child->mkdir("..", parent);
     }
 
-    int Partition::unlink(dir_ptr parent, std::string child)
+    int Partition::unlink(dir_ptr parent, const std::string &child)
     {
         inode_ptr target = parent->lookup(child);
         if (nullptr == target)

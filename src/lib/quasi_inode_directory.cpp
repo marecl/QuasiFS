@@ -20,20 +20,20 @@ namespace QuasiFS
         return it->second;
     }
 
-    int Directory::link(inode_ptr inode, const std::string &name)
+    int Directory::link(const std::string &name, inode_ptr child)
     {
-        if (nullptr == inode)
+        if (nullptr == child)
             return -ENOENT;
 
-        if (inode->is_dir())
+        if (child->is_dir())
             // CAN'T link a directory
             return -EINVAL;
 
         if (entries.count(name))
             return -EEXIST;
-        entries[name] = inode;
-        if (!inode->is_link())
-            inode->st.st_nlink++;
+        entries[name] = child;
+        if (!child->is_link())
+            child->st.st_nlink++;
         return 0;
     }
 
@@ -68,12 +68,12 @@ namespace QuasiFS
         return r;
     }
 
-    int Directory::mkdir(dir_ptr dir, const std::string &name)
+    int Directory::mkdir(const std::string &name, dir_ptr child)
     {
         if (entries.count(name))
             return -EEXIST;
-        entries[name] = dir;
-        dir->st.st_nlink++;
+        entries[name] = child;
+        child->st.st_nlink++;
         return 0;
     }
 

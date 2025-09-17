@@ -11,8 +11,9 @@ set(SOURCES
 )
 
 add_subdirectory(src/lib)
+add_subdirectory(src/dev)
 
 # Tworzymy plik wykonywalny
 add_executable(quasi_fs ${SOURCES})
 
-target_link_libraries(quasi_fs PRIVATE quasifs_lib)
+target_link_libraries(quasi_fs PRIVATE quasifs_lib dev)

@@ -38,9 +38,6 @@ namespace QuasiFS
             if (0 != status)
                 return status;
 
-            if (nullptr == r.node)
-                return -ENOENT;
-
             if (r.node->is_link())
             {
                 // symlink holds absolute path, so we need to start over.
@@ -54,8 +51,7 @@ namespace QuasiFS
                 // we open /dirD/sym/dirC/tile.txt, so base path is substituted with /dirA/dirB + /dirC/file.txt
                 // incorrect symlink will just throw -ENOTDIR
 
-                path = std::static_pointer_cast<Symlink>(r.node)->follow();
-                path /= r.leaf;
+                path = std::static_pointer_cast<Symlink>(r.node)->follow() / path;
 
                 r.mountpoint = this->rootfs;
                 r.parent = this->root;
@@ -88,7 +84,6 @@ namespace QuasiFS
                     r.parent = mntparent;
                     r.node = mntroot;
 
-                    path = r.leaf;
                     if (!path.empty())
                         continue;
                 }
@@ -115,6 +110,11 @@ namespace QuasiFS
 
     int QFS::touch(const fs::path &path, const std::string &name)
     {
+        return touch(path, name, RegularFile::Create<RegularFile>());
+    }
+
+    int QFS::touch(const fs::path &path, const std::string &name, file_ptr child)
+    {
         Resolved res{};
         int ret = resolve(path, res);
 
@@ -124,7 +124,7 @@ namespace QuasiFS
         partition_ptr fsblk = res.mountpoint;
         dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
 
-        return fsblk->touch(dir, name);
+        return fsblk->touch(dir, name, child);
     }
 
     // Note: target may not exist and symlink will be created
@@ -143,6 +143,11 @@ namespace QuasiFS
 
     int QFS::mkdir(const fs::path &path, const std::string &name)
     {
+        return mkdir(path, name, Directory::Create<Directory>());
+    }
+
+    int QFS::mkdir(const fs::path &path, const std::string &name, dir_ptr child)
+    {
         Resolved res{};
         int status = resolve(path, res);
 
@@ -155,7 +160,7 @@ namespace QuasiFS
         partition_ptr fsblk = res.mountpoint;
         dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
 
-        return fsblk->mkdir(dir, name);
+        return fsblk->mkdir(dir, name, child);
     }
 
     int QFS::rmdir(const fs::path &path)
@@ -186,12 +191,12 @@ namespace QuasiFS
         if (0 == status_where)
             return -EEXIST;
 
-        // cross-partition linking is not supported yet
+        // cross-partition linking is not supported
         if (sos.mountpoint != tar.mountpoint)
             return -EINVAL;
 
         inode_ptr sos_inode = sos.node;
-        return tar.parent->link(sos_inode, tar.leaf);
+        return tar.parent->link(tar.leaf, sos_inode);
     }
 
     int QFS::unlink(const std::string &path)

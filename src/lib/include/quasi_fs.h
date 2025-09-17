@@ -34,12 +34,14 @@ namespace QuasiFS
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         int touch(const fs::path &path);
         int touch(const fs::path &path, const std::string &name);
+        // force-insert child at path
+        int touch(const fs::path &path, const std::string &name, file_ptr child);
 
         int mkdir(const fs::path &path);
         int mkdir(const fs::path &path, const std::string &name);
+        int mkdir(const fs::path &path, const std::string &name, dir_ptr child);
 
         int rmdir(const fs::path &path);
-        int rmdir(const fs::path &path, const std::string &name);
 
         // what is linked where
         int symlink(const fs::path what, const fs::path where);

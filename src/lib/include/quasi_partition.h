@@ -34,7 +34,7 @@ namespace QuasiFS
         inode_ptr GetInode(fileno_t fileno);
         blkid_t GetBlkId(void) { return this->block_id; };
 
-        int resolve(fs::path path, Resolved &r);
+        int resolve(fs::path &path, Resolved &r);
 
         bool IndexInode(inode_ptr node);
         int rmInode(fileno_t target);
@@ -42,21 +42,21 @@ namespace QuasiFS
 
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         int touch(dir_ptr parent, const std::string &name);
-        int touch(dir_ptr parent, file_ptr child, const std::string &name);
+        int touch(dir_ptr parent, const std::string &name, file_ptr child);
 
         int rm(fileno_t fileno);
         int rm(fs::path path);
         int rm(inode_ptr node);
 
-        int mkdir(dir_ptr parent,  const std::string &name);
-        int mkdir(dir_ptr parent, dir_ptr new_dir,  const std::string &name);
+        int mkdir(dir_ptr parent, const std::string &name);
+        int mkdir(dir_ptr parent, const std::string &name, dir_ptr child);
 
         int rmdir(fs::path path);
-        int rmdir(dir_ptr parent,  const std::string &name);
+        int rmdir(dir_ptr parent, const std::string &name);
 
         static void mkrelative(dir_ptr parent, dir_ptr child);
 
-        int unlink(dir_ptr parent, std::string child);
+        int unlink(dir_ptr parent, const std::string& child);
     };
 
 };

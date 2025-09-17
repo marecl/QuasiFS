@@ -44,5 +44,3 @@ Symlinks are cross-partition, but handled only by `QFS`.
 * Flexible (and realistic) fileno and blockdev values
 * Dirents
 * More tests
-    * tracking `nlink`
-    * verification of removed inodes  
