@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 
-#include "quasi_types.h"
+#include "quasifs_types.h"
 
 namespace QuasiFS
 {

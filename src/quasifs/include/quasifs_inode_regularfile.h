@@ -1,14 +1,15 @@
 #pragma once
 
-#include "quasi_types.h"
-#include "quasi_inode.h"
+#include "quasifs_types.h"
+#include "quasifs_inode.h"
 
 namespace QuasiFS
 {
 
     class RegularFile : public Inode
     {
-        // std::vector<char> data;
+        std::vector<char> data;
+
     public:
         RegularFile();
         ~RegularFile() = default;

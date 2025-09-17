@@ -1,7 +1,8 @@
 #pragma once
 
-#include "lib/include/quasi_fs.h"
+#include "quasifs/include/quasifs.h"
 #include "log.h"
+#include <sys/fcntl.h>
 
 using namespace QuasiFS;
 
@@ -69,6 +70,45 @@ void TestStLinkFile(QFS &qfs);
 void TestStLinkDir(QFS &qfs) {};
 void TestStLinkMixed(QFS &qfs) {};
 
+void TestFileOpen(QFS &qfs)
+{
+    LogTest("Opening / closing files");
+
+    qfs.touch("/file_open");
+
+    int fd = qfs.open("/file_open", 0);
+    if (fd < 0)
+    {
+        LogError("open() returned error: {}", fd);
+        return;
+    }
+
+    if (int status = qfs.close(fd); status != 0)
+        LogError("close() returned error: {}", status);
+}
+
+void TestFileops(QFS &qfs)
+{
+    // LogTest("File R/W");
+
+    // qfs.touch("/file_open");
+
+    // int fd = qfs.open("/file_open", O_RDWR);
+    // if (fd < 0)
+    // {
+    //     LogError("open() returned error: {}", fd);
+    //     return;
+    // }
+
+    // const uint8_t bufW[] = "XDXDXDXD\nTest\00\11AAA\n";
+    // const auto bufWsize = sizeof(bufW) / sizeof(uint8_t);
+    // uint8_t bufR[128]{};
+
+    // Log("Zapisano: {}", qfs.write(fd, bufW, bufWsize));
+    // Log("Odczytano: {}", qfs.read(fd, bufR, 128));
+    // qfs.close(fd);
+}
+
 void Test(QFS &qfs)
 {
     Log("");
@@ -88,6 +128,10 @@ void Test(QFS &qfs)
     TestStLinkDir(qfs);
     TestStLinkMixed(qfs);
 
+    // Files
+    TestFileOpen(qfs);
+    TestFileops(qfs);
+
     // symlinks
 
     Log("");
@@ -98,109 +142,113 @@ void Test(QFS &qfs)
 void TestTouchUnlinkFile(QFS &qfs)
 {
     LogTest("Create a file");
-
-    if (0 != qfs.touch("/testfile"))
-    {
-        LogError("touch failed");
-    }
-
+    const fs::path path = "/testfile";
     Resolved r{};
-    int status = qfs.resolve("/testfile", r);
+
+    if (int status = qfs.touch(path); status != 0)
+        LogError("touch {} : {}", path.string(), status);
+    else
+        LogSuccess("Touched {}", path.string());
+
+    if (int status = qfs.resolve(path, r); status != 0)
+        LogError("Can't resolve: {}", status);
+    else
+        LogSuccess("Resolved");
 
     if (r.parent != qfs.GetRoot())
-    {
         LogError("Wrong parent");
-    }
 
-    if (!r.node)
-    {
-        LogError("Not created");
-    }
+    if (int status = qfs.unlink(path); status != 0)
+        LogError("unlink failed: {}", status);
+    else
+        LogSuccess("Unlinked");
 
-    status = qfs.unlink("/testfile");
-    if (0 != status)
-    {
-        LogError("unlink failed");
-    }
-
-    status = qfs.resolve("/testfile", r);
-
-    if (status != -ENOENT)
-    {
-        LogError("Didn't remove file");
-    }
+    if (int status = qfs.resolve(path, r); status != -ENOENT)
+        LogError("file not removed: {}", status);
+    else
+        LogSuccess("Removal confirmed");
 }
 
 void TestMkRmdir(QFS &qfs)
 {
     LogTest("Create a directory");
-
-    if (0 != qfs.mkdir("/testdir"))
-    {
-        LogError("mkdir failed");
-    }
-
+    fs::path path = "/testdir";
     Resolved r{};
-    int status = qfs.resolve("/testdir", r);
+
+    if (int status = qfs.mkdir(path); status != 0)
+        LogError("mkdir {} : {}", path.string(), status);
+    else
+        LogSuccess("mkdir'd {}", path.string());
+
+    if (int status = qfs.resolve(path, r); status != 0)
+        LogError("Can't resolve: {}", status);
+    else
+        LogSuccess("Resolved");
 
     if (r.parent != qfs.GetRoot())
-    {
         LogError("Wrong parent");
-    }
 
-    if (!r.node)
-    {
-        LogError("Not created");
-    }
-
-    if (0 != qfs.rmdir("/testdir"))
-    {
+    if (int status = qfs.rmdir(path); status != 0)
         LogError("rmdir failed");
-    }
+    else
+        LogSuccess("rmdir'd");
 
-    status = qfs.resolve("/testdir", r);
-
-    if (-ENOENT != status)
-    {
-        LogError("Didn't remove dir");
-    }
+    if (int status = qfs.resolve(path, r); -ENOENT != status)
+        LogError("dir not removed: {}", status);
+    else
+        LogSuccess("Removal confirmed");
 }
 
 void TestMount(QFS &qfs)
 {
     LogTest("Mount");
 
-    qfs.mkdir("/dummy");
-    qfs.mkdir("/dummy/mount");
-
     auto part = Partition::Create();
 
     if (nullptr == part)
     {
         LogError("Can't create partition object");
+        return;
     }
 
     Resolved r{};
-    int status = qfs.resolve("/dummy/mount", r);
 
-    if (nullptr == r.node)
+    qfs.mkdir("/dummy");
+    qfs.mkdir("/dummy/mount");
+
+    if (int status = qfs.resolve("/dummy/mount", r); status != 0)
     {
-        LogError("Pre-mount dir not found");
+        LogError("Mountpoint dir not created: {}", status);
         return;
     }
+    else
+        LogSuccess("mkdir'd /dummy/mount");
+
+    if (nullptr == r.parent)
+        LogError("Parent doesn't exist");
+
+    if (nullptr == r.node)
+        LogError("Child doesn't exist");
 
     auto parent_from_root = r.parent->lookup("mount")->GetFileno();
     auto self_fileno = std::static_pointer_cast<Directory>(r.node)->lookup(".")->GetFileno();
     auto parent_fileno = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
 
-    Log("Pre-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root, parent_fileno, self_fileno);
+    Log("\tPre-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root, parent_fileno, self_fileno);
 
-    if (0 != qfs.mount("/dummy/mount", part))
+    if (int status = qfs.mount("/dummy/mount", part); status != 0)
     {
-        LogError("Can't mount");
+        LogError("Can't mount: {}", status);
     }
+    else
+        LogSuccess("Mounted");
 
-    status = qfs.resolve("/dummy/mount", r);
+    if (int status = qfs.resolve("/dummy/mount", r); status != 0)
+    {
+        LogError("Can't resolve /dummy/mount after mounting: {}", status);
+    }
+    else
+        LogSuccess("After-mount resolved");
 
     if (nullptr == r.node)
     {
@@ -213,14 +261,14 @@ void TestMount(QFS &qfs)
         LogError("Bad partition");
     }
 
-    status = qfs.resolve("/dummy", r);
+    qfs.resolve("/dummy", r);
     auto parent_from_root_mount = std::static_pointer_cast<Directory>(r.node)->lookup("mount")->GetFileno();
 
-    status = qfs.resolve("/dummy/mount", r);
+    qfs.resolve("/dummy/mount", r);
     auto self_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup(".")->GetFileno();
     auto parent_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
 
-    Log("Post-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root_mount, parent_fileno_mount, self_fileno_mount);
+    Log("\tPost-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root_mount, parent_fileno_mount, self_fileno_mount);
     if (self_fileno_mount != 2)
     {
         LogError("Mountpoint root fileno isn't 2");
@@ -248,13 +296,12 @@ void TestMount(QFS &qfs)
 
     if (r.node != part->GetRoot())
     {
-        LogError("Bad node");
+        LogError("Mountpoint root isn't partition root");
     }
 
-    status = qfs.unmount("/dummy/mount");
-    if (0 != status)
+    if (int status = qfs.unmount("/dummy/mount"); 0 != status)
     {
-        LogError("Can't unmount");
+        LogError("Can't unmount: {}", status);
     }
 
     qfs.rmdir("/dummy/mount");
@@ -279,62 +326,61 @@ void TestMountFileRetention(QFS &qfs)
     Resolved rfile{};
     Resolved rdir{};
 
-    int status_file = qfs.resolve("/mount/testfile", rfile);
-    int status_dir = qfs.resolve("/mount/testdir", rdir);
-
-    if (-ENOENT == status_file)
+    if (int status_file = qfs.resolve("/mount/testfile", rfile); -ENOENT == status_file)
     {
-        LogError("Test file not created");
+        LogError("Test file not created: {}", status_file);
         return;
     }
-    if (-ENOENT == status_dir)
+    else
+        LogSuccess("Test file created");
+    if (int status_dir = qfs.resolve("/mount/testdir", rdir); -ENOENT == status_dir)
     {
-        LogError("Test directory not created");
+        LogError("Test directory not created: {}", status_dir);
         return;
     }
+    else
+        LogSuccess("Test directory created");
 
     auto ffileno = rfile.node->GetFileno();
     auto dfileno = rdir.node->GetFileno();
-    Log("Pre-mount file fileno: {}", ffileno);
-    Log("Pre-mount dir fileno: {}", dfileno);
+    Log("\tPre-mount file fileno: {}", ffileno);
+    Log("\tPre-mount dir fileno: {}", dfileno);
 
     qfs.mount("/mount", part);
 
-    status_file = qfs.resolve("/mount/testfile", rfile);
-    status_dir = qfs.resolve("/mount/testdir", rdir);
-
-    if (-ENOENT != status_file)
+    if (int status_file = qfs.resolve("/mount/testfile", rfile); -ENOENT != status_file)
     {
-        LogError("Pre-mount file preserved");
+        LogError("Pre-mount file preserved (if 0), or error (if not ENOENT): {}", status_file);
         return;
     }
-    if (-ENOENT != status_dir)
+    if (int status_dir = qfs.resolve("/mount/testdir", rdir); -ENOENT != status_dir)
     {
-        LogError("Pre-mount directory preserved");
+        LogError("Pre-mount directory preserved (if 0), or error (if not ENOENT): {}", status_dir);
         return;
     }
 
     qfs.touch("/mount/testfile_mnt");
     qfs.mkdir("/mount/testdir_mnt");
 
-    status_file = qfs.resolve("/mount/testfile_mnt", rfile);
-    status_dir = qfs.resolve("/mount/testdir_mnt", rdir);
-
-    if (-ENOENT == status_file)
+    if (int status_file = qfs.resolve("/mount/testfile_mnt", rfile); -ENOENT == status_file)
     {
-        LogError("After-mount file not created");
+        LogError("After-mount file not created: {}", status_file);
         return;
     }
-    if (-ENOENT == status_dir)
+    else
+        LogSuccess("Test file created (mount)");
+    if (int status_dir = qfs.resolve("/mount/testdir_mnt", rdir); -ENOENT == status_dir)
     {
-        LogError("After-mount directory not created");
+        LogError("After-mount directory not created: {}", status_dir);
         return;
     }
+    else
+        LogSuccess("Test dir created (mount)");
 
     auto ffileno_mnt = rfile.node->GetFileno();
     auto dfileno_mnt = rdir.node->GetFileno();
-    Log("New file in mounted directory fileno: {}", ffileno_mnt);
-    Log("New directory in mounted directory fileno: {}", dfileno_mnt);
+    Log("\tNew file in mounted directory fileno: {}", ffileno_mnt);
+    Log("\tNew directory in mounted directory fileno: {}", dfileno_mnt);
 
     if (ffileno == ffileno_mnt)
     {
@@ -348,13 +394,12 @@ void TestMountFileRetention(QFS &qfs)
 
     qfs.unmount("/mount");
 
-    status_file = qfs.resolve("/mount/testfile", rfile);
-    status_dir = qfs.resolve("/mount/testdir", rdir);
-
+    qfs.resolve("/mount/testfile", rfile);
+    qfs.resolve("/mount/testdir", rdir);
     auto ffileno_unmount = rfile.node->GetFileno();
     auto dfileno_unmount = rdir.node->GetFileno();
-    Log("After unmount: /mount/testfile fileno: {}", ffileno);
-    Log("After unmount: /mount/testdir fileno: {}", dfileno);
+    Log("\tAfter unmount: /mount/testfile fileno: {}", ffileno);
+    Log("\tAfter unmount: /mount/testdir fileno: {}", dfileno);
 
     if (ffileno != ffileno_unmount)
     {
@@ -366,66 +411,74 @@ void TestMountFileRetention(QFS &qfs)
         LogError("Directory changed after mount cycle. Before: {}, after: {}", dfileno, dfileno_unmount);
     }
 
-    status_file = qfs.resolve("/mount/testfile_mnt", rfile);
-    status_dir = qfs.resolve("/mount/testdir_mnt", rdir);
-    if (-ENOENT != status_file)
+    if (int status_file = qfs.resolve("/mount/testfile_mnt", rfile); -ENOENT != status_file)
     {
         LogError("Mountpoint file persisted");
     }
-    if (-ENOENT != status_dir)
+    else
+        LogSuccess("Mountpoint file doesn't exist");
+    if (int status_dir = qfs.resolve("/mount/testdir_mnt", rdir); -ENOENT != status_dir)
     {
         LogError("Mountpoint directory persisted");
     }
+    else
+        LogSuccess("Mountpoint dir doesn't exist");
 }
 
 void TestStLinkFile(QFS &qfs)
 {
     LogTest("File link counter");
 
-    qfs.touch("/file");
-
     Resolved r{};
-    int status = qfs.resolve("/file", r);
+
+    qfs.touch("/file");
+    qfs.resolve("/file", r);
 
     file_ptr f = std::reinterpret_pointer_cast<RegularFile>(r.node);
 
-    if (f->st.st_nlink != 1)
+    auto nlink = &f->st.st_nlink;
+
+    if (*nlink != 1)
     {
-        LogError("New file link {} != 1", f->st.st_nlink);
+        LogError("New file link {} != 1", *nlink);
     }
+    else
+        LogSuccess("Created new file with st_nlink={}", *nlink);
 
-    status = qfs.link("/file", "/file2");
-
-    if (0 != status)
+    if (int status = qfs.link("/file", "/file2"); 0 != status)
     {
         LogError("Link existing file failed");
     }
+    else
+        LogSuccess("File linked");
 
-    if (f->st.st_nlink != 2)
+    if (*nlink != 2)
     {
-        LogError("New file link {} != 2", f->st.st_nlink);
+        LogError("New file link {} != 2", *nlink);
+    }
+    else
+        LogSuccess("New file nlink==2");
+
+    if (int status = qfs.unlink("/file"); 0 != status)
+    {
+        LogError("Unlink OG file failed: {}", status);
+    }
+    else
+        LogSuccess("File unlinked");
+
+    if (*nlink != 1)
+    {
+        LogError("New file link {} != 1", *nlink);
     }
 
-    status = qfs.unlink("/file");
-    if (0 != status)
+    if (int status = qfs.unlink("/file2"); 0 != status)
     {
-        LogError("Unlink OG file failed");
+        LogError("Unlink new-linked file failed: {}", status);
     }
 
-    if (f->st.st_nlink != 1)
+    if (*nlink != 0)
     {
-        LogError("New file link {} != 1", f->st.st_nlink);
-    }
-
-    status = qfs.unlink("/file2");
-    if (0 != status)
-    {
-        LogError("Unlink new-linked file failed");
-    }
-
-    if (f->st.st_nlink != 0)
-    {
-        LogError("New file link {} != 0", f->st.st_nlink);
+        LogError("New file link {} != 0", *nlink);
     }
 
     inode_ptr readback = qfs.GetRootFS()->GetInode(f->GetFileno());

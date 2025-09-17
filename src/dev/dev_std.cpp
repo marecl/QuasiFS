@@ -21,7 +21,6 @@ namespace Devices
     {
         return fread(buf, 1, count, stdin);
     }
-
     ssize_t DevStdin::write(off_t offset, const void *buf, size_t count)
     {
         return 0;
@@ -32,9 +31,40 @@ namespace Devices
     {
         return 0;
     }
-
     ssize_t DevStderr::write(off_t offset, const void *buf, size_t count)
     {
         return fwrite(buf, 1, count, stdout);
+    }
+
+    // /dev/random
+    ssize_t DevRandom::read(off_t offset, void *buf, size_t count)
+    {
+        memset(buf, 0xAA, count);
+        return count;
+    }
+    ssize_t DevRandom::write(off_t offset, const void *buf, size_t count)
+    {
+        return 0;
+    }
+
+    // /dev/zero
+    ssize_t DevZero::read(off_t offset, void *buf, size_t count)
+    {
+        memset(buf, 0, count);
+        return count;
+    }
+    ssize_t DevZero::write(off_t offset, const void *buf, size_t count)
+    {
+        return 0;
+    }
+
+    // /dev/read
+    ssize_t DevNull::read(off_t offset, void *buf, size_t count)
+    {
+        return 0;
+    }
+    ssize_t DevNull::write(off_t offset, const void *buf, size_t count)
+    {
+        return count;
     }
 }

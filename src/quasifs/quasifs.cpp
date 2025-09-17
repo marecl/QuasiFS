@@ -1,10 +1,11 @@
 
-#include "include/quasi_types.h"
-#include "include/quasi_inode_directory.h"
-#include "include/quasi_inode_regularfile.h"
-#include "include/quasi_inode_symlink.h"
-#include "include/quasi_partition.h"
-#include "include/quasi_fs.h"
+#include "include/quasifs_types.h"
+
+#include "include/quasifs_inode_directory.h"
+#include "include/quasifs_inode_regularfile.h"
+#include "include/quasifs_inode_symlink.h"
+#include "include/quasifs_partition.h"
+#include "include/quasifs.h"
 
 namespace QuasiFS
 {
@@ -97,6 +98,94 @@ namespace QuasiFS
             return -ELOOP;
 
         return 0;
+    }
+
+    int QFS::GetFreeHandleNo()
+    {
+        auto open_fd_size = open_fd.size();
+        for (size_t idx = 0; idx < open_fd_size; idx++)
+        {
+            if (this->open_fd[idx] == nullptr)
+                return idx;
+        }
+        open_fd.push_back(nullptr);
+        return open_fd_size;
+    }
+
+    int QFS::open(fs::path path, int flags)
+    {
+        Resolved r{};
+        int status = resolve(path, r);
+
+        if (-ENOENT == status)
+            if ((flags & O_CREAT) == 0)
+                this->touch(path);
+        if (-ENOENT != status)
+        {
+            if (flags & O_EXCL)
+                return -EEXIST;
+            if (0 != status)
+                return status;
+        }
+
+        auto next_free_handle = this->GetFreeHandleNo();
+        fd_handle_ptr handle = File::Create();
+
+        handle->node = r.node;
+        handle->read = flags & O_WRONLY ? false : true;
+        handle->write = flags & O_WRONLY ? true : (flags & O_RDWR);
+
+        this->open_fd[next_free_handle] = handle;
+        return next_free_handle;
+    }
+
+    int QFS::close(int fd)
+    {
+        if (0 > fd || fd >= this->open_fd.size())
+            return -EBADF;
+
+        this->open_fd.at(fd) = nullptr;
+        return 0;
+    }
+
+    ssize_t QFS::write(int fd, const void *buf, size_t count)
+    {
+        return pwrite(fd, buf, count, 0);
+    }
+
+    ssize_t QFS::pwrite(int fd, const void *buf, size_t count, off_t offset)
+    {
+        if (0 > fd || fd >= this->open_fd.size())
+            return -EBADF;
+        fd_handle_ptr handle = this->open_fd.at(fd);
+        if (!handle->write)
+            return -EBADF;
+
+        inode_ptr target = handle->node;
+        if (target->is_file())
+            return std::static_pointer_cast<RegularFile>(target)->write(offset, buf, count);
+        // TODO: remaining types
+        return -EBADF;
+    }
+
+    ssize_t QFS::read(int fd, void *buf, size_t count)
+    {
+        return pread(fd, buf, count, 0);
+    }
+
+    ssize_t QFS::pread(int fd, void *buf, size_t count, off_t offset)
+    {
+        if (0 > fd || fd >= this->open_fd.size())
+            return -EBADF;
+        fd_handle_ptr handle = this->open_fd.at(fd);
+        if (!handle->read)
+            return -EBADF;
+
+        inode_ptr target = handle->node;
+        if (target->is_file())
+            return std::static_pointer_cast<RegularFile>(target)->read(offset, buf, count);
+        // TODO: remaining types
+        return -EBADF;
     }
 
     // create file at path (creates entry in parent dir). returns 0 or negative errno

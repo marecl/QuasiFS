@@ -1,8 +1,8 @@
-#include "include/quasi_types.h"
-#include "include/quasi_partition.h"
-#include "include/quasi_inode_directory.h"
-#include "include/quasi_inode_regularfile.h"
-#include "include/quasi_inode_symlink.h"
+#include "include/quasifs_types.h"
+#include "include/quasifs_partition.h"
+#include "include/quasifs_inode_directory.h"
+#include "include/quasifs_inode_regularfile.h"
+#include "include/quasifs_inode_symlink.h"
 
 namespace QuasiFS
 {

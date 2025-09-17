@@ -1,4 +1,4 @@
-#include "include/quasi_inode_symlink.h"
+#include "include/quasifs_inode_symlink.h"
 
 namespace QuasiFS
 {

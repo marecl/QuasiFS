@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <sys/stat.h>
-#include "quasi_types.h"
+#include "quasifs_types.h"
 
 namespace QuasiFS
 {

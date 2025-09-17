@@ -1,8 +1,10 @@
 #pragma once
 
 #include <unordered_map>
+#include <sys/fcntl.h>
 
-#include "quasi_partition.h"
+#include "quasifs_inode.h"
+#include "quasifs_partition.h"
 
 /**
  * Wrapper class
@@ -22,6 +24,8 @@ namespace QuasiFS
 
         std::unordered_map<uint64_t, partition_ptr> block_devices{};
 
+        std::vector<fd_handle_ptr> open_fd;
+
     public:
         QFS();
         ~QFS() = default;
@@ -30,6 +34,15 @@ namespace QuasiFS
         partition_ptr GetRootFS() { return std::static_pointer_cast<Partition>(this->rootfs); }
 
         int resolve(fs::path path, Resolved &r);
+
+        int GetFreeHandleNo();
+
+        int open(fs::path path, int flags);
+        int close(int fd);
+        ssize_t write(int fd, const void *buf, size_t count);
+        ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
+        ssize_t read(int fd, void *buf, size_t count);
+        ssize_t pread(int fd, void *buf, size_t count, off_t offset);
 
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         int touch(const fs::path &path);
