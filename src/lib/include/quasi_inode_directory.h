@@ -19,7 +19,7 @@ namespace QuasiFS
         Directory();
         ~Directory() = default;
 
-        int mkdir(const std::string &name, dir_ptr inode);
+        int mkdir(dir_ptr dir, const std::string &name);
         // add rmdir
 
         inode_ptr lookup(const std::string &name);

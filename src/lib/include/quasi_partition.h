@@ -49,7 +49,7 @@ namespace QuasiFS
         int rm(inode_ptr node);
 
         int mkdir(dir_ptr parent,  const std::string &name);
-        int mkdir(dir_ptr parent, dir_ptr new_node,  const std::string &name);
+        int mkdir(dir_ptr parent, dir_ptr new_dir,  const std::string &name);
 
         int rmdir(fs::path path);
         int rmdir(dir_ptr parent,  const std::string &name);

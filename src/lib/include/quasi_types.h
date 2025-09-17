@@ -3,6 +3,7 @@
 #include <chrono>
 #include <filesystem>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 namespace QuasiFS
 {
@@ -25,16 +26,7 @@ namespace QuasiFS
     class Directory;
     using dir_ptr = std::shared_ptr<Directory>;
 
-    struct Stat
-    {
-        uint64_t size = 0;
-        uint64_t blocks = 0;
-        uint32_t mode = 0; // posix mode bits
-        uint64_t ino = 0;
-        uint32_t nlink = 0;
-        uint64_t dev = 0;
-        time_point atime, mtime, ctime;
-    };
+    using Stat = struct stat;
 
     // resolve path into (parent_dir, leaf_name, inode)
     struct Resolved

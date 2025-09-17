@@ -30,7 +30,7 @@ namespace QuasiFS
         virtual Stat getattr() { return st; }
 
         // type helpers
-        int type() const { return st.mode & S_IFMT; }
+        int type() const { return st.st_mode & S_IFMT; }
         bool is_file() const { return type() == S_IFREG; }
         bool is_dir() const { return type() == S_IFDIR; }
         bool is_link() const { return type() == S_IFLNK; }

@@ -77,7 +77,7 @@ namespace QuasiFS
                     // mounted fs root directory. target fs is determined by mounted dir st.blk (ie. physical device).
                     // here .leaf holds remainder of the path, that can be used as a starting point to iterate in new partition.
 
-                    auto mounted_blkdev = mntroot->getattr().dev;
+                    auto mounted_blkdev = mntroot->getattr().st_dev;
                     auto lookup_blkdev = this->block_devices.find(mounted_blkdev);
                     if (lookup_blkdev == this->block_devices.end())
                         // check - device not present. unmounted?
@@ -183,17 +183,12 @@ namespace QuasiFS
 
         if (0 != status_what)
             return status_what;
-        if (0 != status_where)
-            return status_where;
+        if (0 == status_where)
+            return -EEXIST;
 
         // cross-partition linking is not supported yet
         if (sos.mountpoint != tar.mountpoint)
             return -EINVAL;
-
-        if (!sos.node)
-            return -ENOENT;
-        if (tar.node)
-            return -EEXIST;
 
         inode_ptr sos_inode = sos.node;
         return tar.parent->link(sos_inode, tar.leaf);

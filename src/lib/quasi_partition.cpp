@@ -113,6 +113,7 @@ namespace QuasiFS
         if (nullptr == node)
             return false;
 
+        // Assign fileno and add it to the fs table
         fileno_t node_fileno = node->GetFileno();
         if (node_fileno == -1)
             node_fileno = node->SetFileno(this->NextFileno());
@@ -127,8 +128,8 @@ namespace QuasiFS
                 IndexInode(dir->mounted_root);
         }
 
-        node->st.ino = node_fileno;
-        node->st.dev = block_id;
+        node->st.st_ino = node_fileno;
+        node->st.st_dev = block_id;
 
         return true;
     }
@@ -146,7 +147,9 @@ namespace QuasiFS
         if (nullptr == target)
             return -ENOENT;
 
-        // TODO: nlink == 0, but check for open file handles, return -EEBUSY
+        if (target->st.st_nlink > 0)
+            return 0;
+        // TODO: check for open file handles, return -EEBUSY
 
         this->inode_table.erase(target->GetFileno());
         return 0;
@@ -204,18 +207,18 @@ namespace QuasiFS
         return mkdir(parent, Inode::Create<Directory>(), name);
     }
 
-    int Partition::mkdir(dir_ptr parent, dir_ptr new_node, const std::string &name)
+    int Partition::mkdir(dir_ptr parent, dir_ptr new_dir, const std::string &name)
     {
         if (nullptr == parent)
             return -1;
 
-        int ret = parent->mkdir(name, new_node);
+        int ret = parent->mkdir(new_dir, name);
 
         if (ret == 0)
-            IndexInode(new_node);
+            IndexInode(new_dir);
 
         auto real_parent = parent->mounted_root ? parent->mounted_root : parent;
-        mkrelative(real_parent, new_node);
+        mkrelative(real_parent, new_dir);
 
         return ret;
     }
@@ -231,8 +234,8 @@ namespace QuasiFS
 
     void Partition::mkrelative(dir_ptr parent, dir_ptr child)
     {
-        child->entries["."] = child;
-        child->entries[".."] = parent;
+        child->mkdir(child, ".");
+        child->mkdir(parent, "..");
     }
 
     int Partition::unlink(dir_ptr parent, std::string child)

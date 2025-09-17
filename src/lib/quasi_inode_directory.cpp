@@ -8,8 +8,8 @@ namespace QuasiFS
 
     Directory::Directory()
     {
-        st.mode = 0000755 | S_IFDIR;
-        st.nlink = 0;
+        st.st_mode = 0000755 | S_IFDIR;
+        st.st_nlink = 0;
     }
 
     inode_ptr Directory::lookup(const std::string &name)
@@ -25,11 +25,15 @@ namespace QuasiFS
         if (nullptr == inode)
             return -ENOENT;
 
+        if (inode->is_dir())
+            // CAN'T link a directory
+            return -EINVAL;
+
         if (entries.count(name))
             return -EEXIST;
         entries[name] = inode;
         if (!inode->is_link())
-            inode->st.nlink++;
+            inode->st.st_nlink++;
         return 0;
     }
 
@@ -38,10 +42,12 @@ namespace QuasiFS
         auto it = entries.find(name);
         if (it == entries.end())
             return -ENOENT;
+
+        inode_ptr target = it->second;
         // if directory and not empty -> EBUSY or ENOTEMPTY
-        if (it->second->is_dir())
+        if (target->is_dir())
         {
-            dir_ptr dir = std::static_pointer_cast<Directory>(it->second);
+            dir_ptr dir = std::static_pointer_cast<Directory>(target);
             auto children = dir->list();
             children.erase(std::remove(children.begin(), children.end(), "."), children.end());
             children.erase(std::remove(children.begin(), children.end(), ".."), children.end());
@@ -49,6 +55,7 @@ namespace QuasiFS
                 return -ENOTEMPTY;
         }
 
+        target->st.st_nlink--;
         entries.erase(it);
         return 0;
     }
@@ -61,18 +68,19 @@ namespace QuasiFS
         return r;
     }
 
-    int Directory::mkdir(const std::string &name, dir_ptr inode)
+    int Directory::mkdir(dir_ptr dir, const std::string &name)
     {
         if (entries.count(name))
             return -EEXIST;
-        entries[name] = inode;
+        entries[name] = dir;
+        dir->st.st_nlink++;
         return 0;
     }
 
     Stat Directory::getattr()
     {
-        // size: arbitrary number of entries * 32
-        st.size = entries.size() * 32;
+        // st_size: arbitrary number of entries * 32
+        st.st_size = entries.size() * 32;
         return st;
     }
 

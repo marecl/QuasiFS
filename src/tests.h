@@ -27,7 +27,7 @@ void _printTree(const inode_ptr &node, const std::string &name, int depth)
         type = "CHR";
 
     if (!name.empty())
-        std::cout << std::format("[{:3s}]\t", type) << std::format("[{:3d}]\t", node->fileno) << std::format("[{:3d}]\t", node->st.nlink) << depEnt << name << std::endl;
+        std::cout << std::format("[{:3s}]\t", type) << std::format("[{:3d}]\t", node->fileno) << std::format("[{:3d}]\t", node->st.st_nlink) << depEnt << name << std::endl;
     else
         depth--;
 
@@ -64,24 +64,10 @@ void TestTouchUnlinkFile(QFS &qfs);
 void TestMkRmdir(QFS &qfs);
 void TestMount(QFS &qfs);
 void TestMountFileRetention(QFS &qfs);
-void TestStLink(QFS &qfs)
-{
-    LogTest("File link counter");
+void TestStLinkFile(QFS &qfs);
 
-    qfs.touch("/file");
-
-    Resolved r{};
-    int status = qfs.resolve("/file", r);
-
-    file_ptr f = std::reinterpret_pointer_cast<RegularFile>(r.node);
-
-    if (f->st.nlink != 1)
-    {
-        LogError("New file link {} != 1", f->st.nlink);
-    }
-
-    // r.mountpoint->rmInode()
-}
+void TestStLinkDir(QFS &qfs) {};
+void TestStLinkMixed(QFS &qfs) {};
 
 void Test(QFS &qfs)
 {
@@ -89,11 +75,20 @@ void Test(QFS &qfs)
     Log("QuasiFS Test Suite");
     Log("");
 
+    // file manip
     TestTouchUnlinkFile(qfs);
     TestMkRmdir(qfs);
+
+    // mounts (partitions)
     TestMount(qfs);
     TestMountFileRetention(qfs);
-    TestStLink(qfs);
+
+    // links
+    TestStLinkFile(qfs);
+    TestStLinkDir(qfs);
+    TestStLinkMixed(qfs);
+
+    // symlinks
 
     Log("");
     Log("Tests complete");
@@ -219,14 +214,13 @@ void TestMount(QFS &qfs)
     }
 
     status = qfs.resolve("/dummy", r);
-    auto parent_from_root_mount =std::static_pointer_cast<Directory>( r.node)->lookup("mount")->GetFileno();
+    auto parent_from_root_mount = std::static_pointer_cast<Directory>(r.node)->lookup("mount")->GetFileno();
 
     status = qfs.resolve("/dummy/mount", r);
-    auto self_fileno_mount = std::static_pointer_cast<Directory>( r.node)->lookup(".")->GetFileno();
-    auto parent_fileno_mount = std::static_pointer_cast<Directory>( r.node)->lookup("..")->GetFileno();
+    auto self_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup(".")->GetFileno();
+    auto parent_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
 
     Log("Post-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root_mount, parent_fileno_mount, self_fileno_mount);
-
     if (self_fileno_mount != 2)
     {
         LogError("Mountpoint root fileno isn't 2");
@@ -381,5 +375,63 @@ void TestMountFileRetention(QFS &qfs)
     if (-ENOENT != status_dir)
     {
         LogError("Mountpoint directory persisted");
+    }
+}
+
+void TestStLinkFile(QFS &qfs)
+{
+    LogTest("File link counter");
+
+    qfs.touch("/file");
+
+    Resolved r{};
+    int status = qfs.resolve("/file", r);
+
+    file_ptr f = std::reinterpret_pointer_cast<RegularFile>(r.node);
+
+    if (f->st.st_nlink != 1)
+    {
+        LogError("New file link {} != 1", f->st.st_nlink);
+    }
+
+    status = qfs.link("/file", "/file2");
+
+    if (0 != status)
+    {
+        LogError("Link existing file failed");
+    }
+
+    if (f->st.st_nlink != 2)
+    {
+        LogError("New file link {} != 2", f->st.st_nlink);
+    }
+
+    status = qfs.unlink("/file");
+    if (0 != status)
+    {
+        LogError("Unlink OG file failed");
+    }
+
+    if (f->st.st_nlink != 1)
+    {
+        LogError("New file link {} != 1", f->st.st_nlink);
+    }
+
+    status = qfs.unlink("/file2");
+    if (0 != status)
+    {
+        LogError("Unlink new-linked file failed");
+    }
+
+    if (f->st.st_nlink != 0)
+    {
+        LogError("New file link {} != 0", f->st.st_nlink);
+    }
+
+    inode_ptr readback = qfs.GetRootFS()->GetInode(f->GetFileno());
+
+    if (nullptr != readback)
+    {
+        LogError("inode wasn't erased from partition after removing all links");
     }
 }
