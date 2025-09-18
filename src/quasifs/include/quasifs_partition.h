@@ -11,6 +11,8 @@ namespace QuasiFS
     {
     private:
         fileno_t NextFileno(void) { return this->next_fileno++; };
+        inode_ptr GetInodeByFileno(fileno_t fileno);
+
 
         // file list
         std::unordered_map<fileno_t, inode_ptr> inode_table{};
@@ -37,8 +39,8 @@ namespace QuasiFS
         int resolve(fs::path &path, Resolved &r);
 
         bool IndexInode(inode_ptr node);
-        int rmInode(fileno_t target);
-        int rmInode(inode_ptr target);
+        int rmInode(fileno_t fileno);
+        int rmInode(inode_ptr node);
 
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         int touch(dir_ptr parent, const std::string &name);

@@ -22,14 +22,14 @@ namespace QuasiFS
         }
 
         // file-like
-        virtual ssize_t read(off_t /*offset*/, void * /*buf*/, size_t /*count*/) { return -ENOSYS; }
-        virtual ssize_t write(off_t /*offset*/, const void * /*buf*/, size_t /*count*/) { return -ENOSYS; }
+        virtual ssize_t read(off_t offset, void *buf, size_t count) { return -ENOSYS; }
+        virtual ssize_t write(off_t offset, const void *buf, size_t count) { return -ENOSYS; }
 
         // metadata
         virtual Stat getattr() { return st; }
 
         // type helpers
-        int type() const { return st.st_mode & S_IFMT; }
+        mode_t type() const { return st.st_mode & S_IFMT; }
         bool is_file() const { return type() == S_IFREG; }
         bool is_dir() const { return type() == S_IFDIR; }
         bool is_link() const { return type() == S_IFLNK; }

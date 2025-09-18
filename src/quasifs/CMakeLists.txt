@@ -1,4 +1,15 @@
-# biblioteka z plików źródłowych
+# Host IO
+add_library(host_io_lib
+    host_io_posix.cpp
+    host_io_win32.cpp
+    )
+
+target_include_directories(host_io_lib
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# QuasiFS
 add_library(quasifs_lib
     quasifs.cpp
     quasifs_inode_directory.cpp
@@ -7,7 +18,6 @@ add_library(quasifs_lib
     quasifs_partition.cpp    
     )
 
-# wskaż katalog z nagłówkami
 target_include_directories(quasifs_lib
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include

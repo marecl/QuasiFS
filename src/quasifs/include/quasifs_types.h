@@ -72,8 +72,6 @@ namespace QuasiFS
         bool write{};     // write permission
         off_t pos{};      // cursor offset
 
-        // add native file handle
-
         static fd_handle_ptr Create()
         {
             return std::shared_ptr<File>(new File());

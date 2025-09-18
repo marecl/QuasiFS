@@ -20,12 +20,6 @@ namespace QuasiFS
         return part;
     }
 
-    inode_ptr Partition::GetInode(fileno_t fileno)
-    {
-        auto ret = inode_table.find(fileno);
-        return (ret == inode_table.end()) ? nullptr : ret->second;
-    }
-
     int Partition::resolve(fs::path &path, Resolved &r)
     {
         if (path.empty())
@@ -137,24 +131,24 @@ namespace QuasiFS
         return true;
     }
 
-    int Partition::rmInode(fileno_t target)
+    int Partition::rmInode(fileno_t fileno)
     {
-        auto t = this->inode_table.find(target);
-        if (t == this->inode_table.end())
-            return -ENOENT;
-        return rmInode(t->second);
-    }
-
-    int Partition::rmInode(inode_ptr target)
-    {
+        inode_ptr target = GetInodeByFileno(fileno);
         if (nullptr == target)
             return -ENOENT;
+        return rmInode(target);
+    }
 
-        if (target->st.st_nlink > 0)
+    int Partition::rmInode(inode_ptr node)
+    {
+        if (nullptr == node)
+            return -ENOENT;
+
+        if (node->st.st_nlink > 0)
             return 0;
         // TODO: check for open file handles, return -EEBUSY
 
-        this->inode_table.erase(target->GetFileno());
+        this->inode_table.erase(node->GetFileno());
         return 0;
     }
 
@@ -180,11 +174,11 @@ namespace QuasiFS
         if (fileno == -1)
             return -EINVAL;
 
-        auto target = this->inode_table.find(fileno);
-        if (target == this->inode_table.end())
+        inode_ptr target = GetInodeByFileno(fileno);
+        if (nullptr == target)
             return -ENOENT;
 
-        return rm(target->second);
+        return rm(target);
     }
 
     int Partition::rm(fs::path path)
@@ -253,4 +247,11 @@ namespace QuasiFS
 
         return rmInode(target);
     }
+
+    inode_ptr Partition::GetInodeByFileno(fileno_t fileno)
+    {
+        auto ret = inode_table.find(fileno);
+        return (ret == inode_table.end()) ? nullptr : ret->second;
+    }
+
 };

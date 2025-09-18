@@ -75,11 +75,10 @@ namespace QuasiFS
                     // here .leaf holds remainder of the path, that can be used as a starting point to iterate in new partition.
 
                     auto mounted_blkdev = mntroot->getattr().st_dev;
-                    auto lookup_blkdev = this->block_devices.find(mounted_blkdev);
-                    if (lookup_blkdev == this->block_devices.end())
-                        // check - device not present. unmounted?
+
+                    partition_ptr mounted_partition = GetPartitionByBlockdev(mounted_blkdev);
+                    if (nullptr == mounted_partition)
                         return -ENOENT;
-                    partition_ptr mounted_partition = lookup_blkdev->second;
 
                     r.mountpoint = mounted_partition;
                     r.parent = mntparent;
@@ -100,16 +99,54 @@ namespace QuasiFS
         return 0;
     }
 
-    int QFS::GetFreeHandleNo()
+    // mount fs at path (target must exist and be directory)
+    int QFS::mount(const fs::path &path, partition_ptr fs)
     {
-        auto open_fd_size = open_fd.size();
-        for (size_t idx = 0; idx < open_fd_size; idx++)
-        {
-            if (this->open_fd[idx] == nullptr)
-                return idx;
-        }
-        open_fd.push_back(nullptr);
-        return open_fd_size;
+        if (nullptr != GetPartitionByBlockdev(fs->GetBlkId()))
+            return -EEXIST;
+
+        Resolved res{};
+        int status = resolve(path, res);
+
+        if (0 != status)
+            return status;
+
+        if (!res.node->is_dir())
+            return -ENOTDIR;
+
+        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
+
+        if (dir->mounted_root)
+            return -EEXIST;
+
+        dir->mounted_root = fs->GetRoot();
+        this->block_devices[fs->GetBlkId()] = fs;
+
+        return 0;
+    }
+
+    // mount fs at path (target must exist and be directory)
+    int QFS::unmount(const fs::path &path)
+    {
+        Resolved res{};
+        int status = resolve(path, res);
+
+        if (0 != status)
+            return status;
+
+        if (nullptr == GetPartitionByBlockdev(res.mountpoint->GetBlkId()))
+            return -EINVAL;
+
+        dir_ptr dir = std::static_pointer_cast<Directory>(res.parent);
+
+        if (nullptr == dir->mounted_root)
+            // mounted but rootdir disappeared O.o
+            return -EINVAL;
+
+        dir->mounted_root = nullptr;
+        this->block_devices.erase(res.mountpoint->GetBlkId());
+
+        return 0;
     }
 
     int QFS::open(fs::path path, int flags)
@@ -277,12 +314,6 @@ namespace QuasiFS
         return fsblk->touch(dir, name, child);
     }
 
-    // Note: target may not exist and symlink will be created
-    int QFS::symlink(const fs::path path, const fs::path target)
-    {
-        return -EINVAL;
-    }
-
     int QFS::mkdir(const fs::path &path)
     {
         fs::path base = path.parent_path();
@@ -349,10 +380,10 @@ namespace QuasiFS
         return tar.parent->link(tar.leaf, sos_inode);
     }
 
-    int QFS::unlink(const std::string &path)
+    int QFS::unlink(const std::string &where)
     {
         Resolved res{};
-        int status = resolve(path, res);
+        int status = resolve(where, res);
 
         if (0 != status)
             return status;
@@ -364,58 +395,48 @@ namespace QuasiFS
         return part->unlink(dir, res.leaf);
     }
 
-    // mount fs at path (target must exist and be directory)
-    int QFS::mount(const fs::path &path, partition_ptr fs)
+    // Note: target may not exist and symlink will be created
+    int QFS::symlink(const fs::path path, const fs::path target)
     {
-        auto target_blkdev = this->block_devices.find(fs->GetBlkId());
-        // already mounted
-        if (target_blkdev != this->block_devices.end())
-            return -EEXIST;
-
-        Resolved res{};
-        int status = resolve(path, res);
-
-        if (0 != status)
-            return status;
-
-        if (!res.node->is_dir())
-            return -ENOTDIR;
-
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
-
-        if (dir->mounted_root)
-            return -EEXIST;
-
-        dir->mounted_root = fs->GetRoot();
-        this->block_devices[fs->GetBlkId()] = fs;
-
-        return 0;
+        // unimplemented
+        return -EINVAL;
     }
 
-    // mount fs at path (target must exist and be directory)
-    int QFS::unmount(const fs::path &path)
+    int QFS::GetFreeHandleNo()
     {
-        Resolved res{};
-        int status = resolve(path, res);
+        auto open_fd_size = open_fd.size();
+        for (size_t idx = 0; idx < open_fd_size; idx++)
+        {
+            if (this->open_fd[idx] == nullptr)
+                return idx;
+        }
+        open_fd.push_back(nullptr);
+        return open_fd_size;
+    }
 
-        if (0 != status)
-            return status;
-
-        auto target_blkdev = this->block_devices.find(res.mountpoint->GetBlkId());
+    partition_ptr QFS::GetPartitionByBlockdev(uint64_t blkid)
+    {
+        auto target_blkdev = this->block_devices.find(blkid);
+        // already mounted
         if (target_blkdev == this->block_devices.end())
-            // not mounted
-            return -EINVAL;
+            return nullptr;
+        return target_blkdev->second;
+    }
 
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.parent);
+    fs::path QFS::GetHostPathByPath(const fs::path &path)
+    {
+        Resolved r{};
+        if (0 != this->resolve(path, r))
+            return {};
+        return GetHostPathByInode(r.node);
+    }
 
-        if (nullptr == dir->mounted_root)
-            // mounted but rootdir disappeared O.o
-            return -EINVAL;
-
-        dir->mounted_root = nullptr;
-        this->block_devices.erase(res.mountpoint->GetBlkId());
-
-        return 0;
+    fs::path QFS::GetHostPathByInode(inode_ptr node)
+    {
+        auto target_path = this->host_files.find(node);
+        if (target_path == this->host_files.end())
+            return {};
+        return target_path->second;
     }
 
 };

@@ -493,12 +493,13 @@ void TestStLinkFile(QFS &qfs)
     else
         LogSuccess("nlink=1");
 
-    inode_ptr readback = qfs.GetRootFS()->GetInode(f->GetFileno());
+    LogError("Reimplement readback")
+    // inode_ptr readback = qfs.GetRootFS()->GetInode(f->GetFileno());
 
-    if (nullptr != readback)
-    {
-        LogError("inode wasn't erased from partition after removing all links");
-    }
+    // if (nullptr != readback)
+    // {
+    //     LogError("inode wasn't erased from partition after removing all links");
+}
 }
 
 void TestFileOpen(QFS &qfs)
