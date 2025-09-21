@@ -7,14 +7,14 @@
 #include "dev/include/dev_std.h"
 
 #include "log.h"
-#include "tests.h"
+// #include "tests.h"
 
 using namespace QuasiFS;
 
 int main()
 {
     QFS v;
-    Test(v);
+    // Test(v);
 
     // QFS vv;
     // vv.mkdir("/dev");

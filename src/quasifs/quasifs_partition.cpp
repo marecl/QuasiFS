@@ -1,4 +1,6 @@
+#include "include/quasi_errno.h"
 #include "include/quasifs_types.h"
+
 #include "include/quasifs_partition.h"
 #include "include/quasifs_inode_directory.h"
 #include "include/quasifs_inode_regularfile.h"
@@ -9,7 +11,7 @@ namespace QuasiFS
 
     Partition::Partition() : block_id(next_block_id++)
     {
-        this->root = Inode::Create<Directory>();
+        this->root = Directory::Create();
         IndexInode(this->root);
         mkrelative(this->root, this->root);
     };
@@ -23,7 +25,7 @@ namespace QuasiFS
     int Partition::resolve(fs::path &path, Resolved &r)
     {
         if (path.empty())
-            return -ENOENT;
+            return -QUASI_ENOENT;
 
         r.parent = this->root;
         r.node = this->root;
@@ -47,7 +49,7 @@ namespace QuasiFS
 
             // non-final element can't be anything other than a dir or link
             if (!(current->is_link() || current->is_dir()) && !is_final)
-                return -ENOTDIR;
+                return -QUASI_ENOTDIR;
 
             // link - return with mountpoint and remaining path
             // to be resolved by superblock, just check if `node` is a link,
@@ -79,7 +81,7 @@ namespace QuasiFS
 
             // file not found in current directory, ENOENT
             if (nullptr == r.node)
-                return -ENOENT;
+                return -QUASI_ENOENT;
 
             // quick lookahead if this directory is a mountpoint
             if (current->is_dir())
@@ -135,18 +137,19 @@ namespace QuasiFS
     {
         inode_ptr target = GetInodeByFileno(fileno);
         if (nullptr == target)
-            return -ENOENT;
+            return -QUASI_ENOENT;
         return rmInode(target);
     }
 
     int Partition::rmInode(inode_ptr node)
     {
         if (nullptr == node)
-            return -ENOENT;
+            return -QUASI_ENOENT;
 
         if (node->st.st_nlink > 0)
             return 0;
-        // TODO: check for open file handles, return -EEBUSY
+            
+        // TODO: check for open file handles, return -QUASI_EEBUSY
 
         this->inode_table.erase(node->GetFileno());
         return 0;
@@ -155,7 +158,7 @@ namespace QuasiFS
     // create file at path (creates entry in parent dir). returns 0 or negative errno
     int Partition::touch(dir_ptr node, const std::string &name)
     {
-        return this->touch(node, name, Inode::Create<RegularFile>());
+        return this->touch(node, name, RegularFile::Create());
     }
 
     int Partition::touch(dir_ptr parent, const std::string &name, file_ptr child)
@@ -172,11 +175,11 @@ namespace QuasiFS
     int Partition::rm(fileno_t fileno)
     {
         if (fileno == -1)
-            return -EINVAL;
+            return -QUASI_EINVAL;
 
         inode_ptr target = GetInodeByFileno(fileno);
         if (nullptr == target)
-            return -ENOENT;
+            return -QUASI_ENOENT;
 
         return rm(target);
     }
@@ -184,7 +187,7 @@ namespace QuasiFS
     int Partition::rm(fs::path path)
     {
         if (path.empty())
-            return -EINVAL;
+            return -QUASI_EINVAL;
 
         // resolve name
         // Resolved r =
@@ -195,13 +198,13 @@ namespace QuasiFS
     int Partition::rm(inode_ptr node)
     {
         if (nullptr == node)
-            return -ENOENT;
+            return -QUASI_ENOENT;
         return 0;
     }
 
     int Partition::mkdir(dir_ptr parent, const std::string &name)
     {
-        return mkdir(parent, name, Inode::Create<Directory>());
+        return mkdir(parent, name, Directory::Create());
     }
 
     int Partition::mkdir(dir_ptr parent, const std::string &name, dir_ptr child)
@@ -222,11 +225,11 @@ namespace QuasiFS
 
     int Partition::rmdir(fs::path path)
     {
-        return -EINVAL;
+        return -QUASI_EINVAL;
     }
     int Partition::rmdir(dir_ptr parent, const std::string &name)
     {
-        return -EINVAL;
+        return -QUASI_EINVAL;
     }
 
     void Partition::mkrelative(dir_ptr parent, dir_ptr child)
@@ -239,7 +242,7 @@ namespace QuasiFS
     {
         inode_ptr target = parent->lookup(child);
         if (nullptr == target)
-            return -ENOENT;
+            return -QUASI_ENOENT;
 
         int status = parent->unlink(child);
         if (0 != status)

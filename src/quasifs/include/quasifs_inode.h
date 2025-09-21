@@ -2,28 +2,30 @@
 
 #include <vector>
 #include <sys/stat.h>
+
+#include "quasi_errno.h"
 #include "quasifs_types.h"
+#include "host_io.h"
 
 namespace QuasiFS
 {
 
-    // Base Inode: domyślnie -ENOSYS (niezaimplementowane)
+    // Base Inode: domyślnie -QUASI_ENOSYS (niezaimplementowane)
     class Inode : std::enable_shared_from_this<Inode>
     {
     public:
         Inode() = default;
+        Inode(fs::path &path) : host_path(path) {};
         virtual ~Inode() = default;
 
-        template <typename T, typename... Args>
-        static std::shared_ptr<T> Create(Args &&...args)
+        static inode_ptr Create(void)
         {
-            static_assert(std::is_base_of<Inode, T>::value, "T must derive from Inode");
-            return std::make_shared<T>(std::forward<Args>(args)...);
+            return std::make_shared<Inode>();
         }
 
         // file-like
-        virtual ssize_t read(off_t offset, void *buf, size_t count) { return -ENOSYS; }
-        virtual ssize_t write(off_t offset, const void *buf, size_t count) { return -ENOSYS; }
+        virtual ssize_t read(off_t offset, void *buf, size_t count) { return -QUASI_ENOSYS; }
+        virtual ssize_t write(off_t offset, const void *buf, size_t count) { return -QUASI_ENOSYS; }
 
         // metadata
         virtual Stat getattr() { return st; }
@@ -44,6 +46,9 @@ namespace QuasiFS
 
         fileno_t fileno{-1};
         Stat st{};
+
+        HostVIO io_driver;
+        fs::path host_path{};
     };
 
 }

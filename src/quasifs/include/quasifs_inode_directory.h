@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 
+#include "quasi_errno.h"
 #include "quasifs_types.h"
 #include "quasifs_inode.h"
 
@@ -18,6 +19,11 @@ namespace QuasiFS
 
         Directory();
         ~Directory() = default;
+
+        static dir_ptr Create(void)
+        {
+            return std::make_shared<Directory>();
+        }
 
         int mkdir(const std::string &name, dir_ptr child);
         // add rmdir

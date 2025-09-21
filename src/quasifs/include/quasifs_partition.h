@@ -11,7 +11,6 @@ namespace QuasiFS
     {
     private:
         fileno_t NextFileno(void) { return this->next_fileno++; };
-        inode_ptr GetInodeByFileno(fileno_t fileno);
 
 
         // file list
@@ -33,8 +32,8 @@ namespace QuasiFS
         }
 
         dir_ptr GetRoot(void) { return this->root; };
-        inode_ptr GetInode(fileno_t fileno);
         blkid_t GetBlkId(void) { return this->block_id; };
+        inode_ptr GetInodeByFileno(fileno_t fileno);
 
         int resolve(fs::path &path, Resolved &r);
 

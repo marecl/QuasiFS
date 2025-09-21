@@ -22,15 +22,15 @@ namespace QuasiFS
 
     int Directory::link(const std::string &name, inode_ptr child)
     {
-        if (nullptr == child)
-            return -ENOENT;
+        if (name.empty() || nullptr == child)
+            return -QUASI_ENOENT;
 
         if (child->is_dir())
             // CAN'T link a directory
-            return -EINVAL;
+            return -QUASI_EPERM;
 
         if (entries.count(name))
-            return -EEXIST;
+            return -QUASI_EEXIST;
         entries[name] = child;
         if (!child->is_link())
             child->st.st_nlink++;
@@ -41,7 +41,7 @@ namespace QuasiFS
     {
         auto it = entries.find(name);
         if (it == entries.end())
-            return -ENOENT;
+            return -QUASI_ENOENT;
 
         inode_ptr target = it->second;
         // if directory and not empty -> EBUSY or ENOTEMPTY
@@ -52,9 +52,15 @@ namespace QuasiFS
             children.erase(std::remove(children.begin(), children.end(), "."), children.end());
             children.erase(std::remove(children.begin(), children.end(), ".."), children.end());
             if (!children.empty())
-                return -ENOTEMPTY;
+                return -QUASI_ENOTEMPTY;
+
+            // parent loses reference from subdir [ .. ]
+            this->st.st_nlink--;
+            // target loses reference from itself [ . ]
+            target->st.st_nlink--;
         }
 
+        // not referenced in original location anymore
         target->st.st_nlink--;
         entries.erase(it);
         return 0;
@@ -70,8 +76,10 @@ namespace QuasiFS
 
     int Directory::mkdir(const std::string &name, dir_ptr child)
     {
+        if (name.empty())
+            return -QUASI_ENOENT;
         if (entries.count(name))
-            return -EEXIST;
+            return -QUASI_EEXIST;
         entries[name] = child;
         child->st.st_nlink++;
         return 0;

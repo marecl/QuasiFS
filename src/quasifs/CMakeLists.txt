@@ -1,5 +1,6 @@
 # Host IO
 add_library(host_io_lib
+    host_io_base.cpp
     host_io_posix.cpp
     host_io_win32.cpp
     )
@@ -12,6 +13,7 @@ target_include_directories(host_io_lib
 # QuasiFS
 add_library(quasifs_lib
     quasifs.cpp
+    quasifs_vdriver.cpp
     quasifs_inode_directory.cpp
     quasifs_inode_regularfile.cpp
     quasifs_inode_symlink.cpp

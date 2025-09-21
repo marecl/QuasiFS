@@ -35,7 +35,7 @@ namespace QuasiFS
     };
 
     // sys/stat.h
-    struct stat
+    struct quasi_stat_t
     {
         dev_t st_dev;         /* Device.  */
         ino_t st_ino;         /* File serial number.	*/
@@ -56,7 +56,7 @@ namespace QuasiFS
 #define st_ctime st_ctim.tv_sec
     };
 
-    using Stat = struct stat;
+    using Stat = struct quasi_stat_t;
 
     typedef struct File File;
     using fd_handle_ptr = std::shared_ptr<File>;
@@ -76,6 +76,13 @@ namespace QuasiFS
         {
             return std::shared_ptr<File>(new File());
         }
+    };
+
+    enum class SeekOrigin : uint8_t
+    {
+        ORIGIN,
+        CURRENT,
+        END
     };
 
 }

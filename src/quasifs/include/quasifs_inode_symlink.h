@@ -14,6 +14,11 @@ namespace QuasiFS
         Symlink(fs::path target);
         ~Symlink() = default;
 
+        static symlink_ptr Create(fs::path target)
+        {
+            return std::make_shared<Symlink>(target);
+        }
+
         fs::path follow(void);
         Stat getattr(inode_ptr inode);
     };
