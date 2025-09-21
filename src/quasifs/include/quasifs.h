@@ -3,7 +3,8 @@
 #include <unordered_map>
 #include <sys/fcntl.h>
 
-#include "host_io.h"
+#include "../../hostio/include/host_io.h"
+#include "../../hostio/include/host_io.h"
 #include "quasifs_inode.h"
 #include "quasifs_partition.h"
 
@@ -16,7 +17,7 @@ namespace QuasiFS
 {
 
     // Very small QFS manager: path resolution, mount, create/unlink
-    class QFS : public HostIO::HostIO_Base
+    class QFS : HostIOBase
     {
         // root partition
         partition_ptr rootfs;
@@ -29,6 +30,8 @@ namespace QuasiFS
         std::vector<fd_handle_ptr> open_fd;
         // host-bound files. user should *never* be able to access real file structure
         std::unordered_map<inode_ptr, fs::path> host_files{};
+
+        HostIO driver{};
 
     public:
         QFS();
@@ -43,56 +46,59 @@ namespace QuasiFS
         // Return root partition
         partition_ptr GetRootFS() { return this->rootfs; }
         // Resolve path. Output is saved to r, returns status code
-        int resolve(fs::path path, Resolved &r);
+        int Resolve(fs::path path, Resolved &r);
 
         // mount fs at path (target must exist and be directory)
-        int mount(const fs::path &path, partition_ptr fs);
+        int Mount(const fs::path &path, partition_ptr fs);
         // mount fs at path (target must exist and be directory)
         int Unmount(const fs::path &path);
 
-        //
-        // File manip methods
-        // If the file is host-bound, op is delegated to HostIO and synchronized with QFS
-        //
+        int MapHost(const fs::path &local, const fs::path &host);
 
-        int Open(const fs::path &path, int flags, int mode) override;
-        int Close(const int fd) override;
-        // Link [what] at [where]
-        int Link(const fs::path &src, const fs::path &dst) override;
-        int Unlink(const fs::path &path) override;
-        int Flush(const int fd) override;
-        int FSync(const int fd) override;
-        int Truncate(const fs::path &path, size_t size) override;
-        int FTruncate(const int fd, size_t size) override;
-        off_t LSeek(const int fd, off_t offset, SeekOrigin origin) override;
-        ssize_t Tell(int fd) override;
-        ssize_t Write(int fd, const void *buf, size_t count) override;
-        ssize_t PWrite(int fd, const void *buf, size_t count, off_t offset) override;
-        ssize_t Read(int fd, void *buf, size_t count) override;
-        ssize_t PRead(int fd, const void *buf, size_t count, off_t offset) override;
-        int MKDir(const fs::path &path, int mode = 0) override;
-        int RMDir(const fs::path &path) override;
-        int Stat(fs::path &path, ::QuasiFS::Stat *stat) override;
-        int FStat(int fd, ::QuasiFS::Stat *statbuf) override;
+        //
+        // Inherited from HostIOBase
+        // Raw file operations
+        //
+        int Open(const fs::path &path, int flags, mode_t mode =0755);
+        int Creat(const fs::path &path, mode_t mode = 0755);
 
-        // internals
+        int Close(const int fd);
+        int LinkSymbolic(const fs::path &src, const fs::path &dst);
+        int Link(const fs::path &src, const fs::path &dst);
+        int Unlink(const fs::path &path);
+        int Flush(const int fd);
+        int FSync(const int fd);
+        int Truncate(const fs::path &path, size_t size);
+        int FTruncate(const int fd, size_t size);
+        off_t LSeek(const int fd, off_t offset, SeekOrigin origin);
+        ssize_t Tell(int fd);
+        ssize_t Write(int fd, const void *buf, size_t count);
+        ssize_t PWrite(int fd, const void *buf, size_t count, off_t offset);
+        ssize_t Read(int fd, void *buf, size_t count);
+        ssize_t PRead(int fd, const void *buf, size_t count, off_t offset);
+        int MKDir(const fs::path &path, int mode = 0755);
+        int RMDir(const fs::path &path);
+
+        int Stat(fs::path &path, quasi_stat_t *stat);
+        int FStat(int fd, quasi_stat_t *statbuf);
+
+        //
+        // Complex file operations, QFS specific
+        //
 
         // Create empty file in path
-        int touch(const fs::path &path);
+        int Touch(const fs::path &path);
         // Create empty file with name in path
-        int touch(const fs::path &path, const std::string &name);
+        int Touch(const fs::path &path, const std::string &name);
         // Force-insert child at path
-        int touch(const fs::path &path, const std::string &name, file_ptr child);
+        int Touch(const fs::path &path, const std::string &name, file_ptr child);
         // Create directory with name in path
-        int mkdir(const fs::path &path, const std::string &name);
+        int MKDir(const fs::path &path, const std::string &name);
         // Force-insert child at path
-        int mkdir(const fs::path &path, const std::string &name, dir_ptr child);
-        // Remove directory
-        int rmdir(const fs::path &path);
+        int MKDir(const fs::path &path, const std::string &name, dir_ptr child);
 
         // Remove link from [where]
         // int Unlink(const std::string &where);
-        int symlink(const fs::path what, const fs::path where);
 
         ssize_t getdirectorysize(const fs::path &path) { return -QUASI_EINVAL; };
         int IsOpen(const int fd) noexcept { return -QUASI_EINVAL; };

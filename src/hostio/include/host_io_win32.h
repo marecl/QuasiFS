@@ -6,14 +6,11 @@
 
 #include <cstdint>
 #include "host_io_virtual.h"
-namespace QuasiFS
-{
-    namespace HostIO
+    namespace HostIODriver
     {
         class HostIO_Win32
         {
         };
     }
-}
 
 #endif

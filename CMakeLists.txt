@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 add_subdirectory(src/dev)
+add_subdirectory(src/hostio)
 add_subdirectory(src/quasifs)
 
 set(SOURCES

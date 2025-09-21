@@ -20,7 +20,7 @@ namespace QuasiFS
         }
 
         fs::path follow(void);
-        Stat getattr(inode_ptr inode);
+        quasi_stat_t getattr(inode_ptr inode);
     };
 
 }

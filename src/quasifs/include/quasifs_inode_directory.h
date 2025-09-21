@@ -34,7 +34,7 @@ namespace QuasiFS
         int unlink(const std::string &name);
 
         std::vector<std::string> list();
-        Stat getattr();
+        quasi_stat_t getattr();
     };
 
 }

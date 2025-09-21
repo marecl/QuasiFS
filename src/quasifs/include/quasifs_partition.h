@@ -35,7 +35,7 @@ namespace QuasiFS
         blkid_t GetBlkId(void) { return this->block_id; };
         inode_ptr GetInodeByFileno(fileno_t fileno);
 
-        int resolve(fs::path &path, Resolved &r);
+        int Resolve(fs::path &path, Resolved &r);
 
         bool IndexInode(inode_ptr node);
         int rmInode(fileno_t fileno);

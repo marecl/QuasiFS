@@ -5,7 +5,6 @@
 
 #include "quasi_errno.h"
 #include "quasifs_types.h"
-#include "host_io.h"
 
 namespace QuasiFS
 {
@@ -15,7 +14,6 @@ namespace QuasiFS
     {
     public:
         Inode() = default;
-        Inode(fs::path &path) : host_path(path) {};
         virtual ~Inode() = default;
 
         static inode_ptr Create(void)
@@ -28,7 +26,7 @@ namespace QuasiFS
         virtual ssize_t write(off_t offset, const void *buf, size_t count) { return -QUASI_ENOSYS; }
 
         // metadata
-        virtual Stat getattr() { return st; }
+        virtual quasi_stat_t getattr() { return st; }
 
         // type helpers
         mode_t type() const { return st.st_mode & S_IFMT; }
@@ -45,10 +43,7 @@ namespace QuasiFS
         };
 
         fileno_t fileno{-1};
-        Stat st{};
-
-        HostVIO io_driver;
-        fs::path host_path{};
+        quasi_stat_t st{};
     };
 
 }

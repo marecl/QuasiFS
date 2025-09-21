@@ -18,7 +18,7 @@ namespace QuasiFS
     }
 
     // if inode is invalid, return symlink stat
-    Stat Symlink::getattr(inode_ptr inode)
+    quasi_stat_t Symlink::getattr(inode_ptr inode)
     {
         if (nullptr == inode)
             return this->st;

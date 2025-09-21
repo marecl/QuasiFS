@@ -22,7 +22,7 @@ namespace QuasiFS
         return part;
     }
 
-    int Partition::resolve(fs::path &path, Resolved &r)
+    int Partition::Resolve(fs::path &path, Resolved &r)
     {
         if (path.empty())
             return -QUASI_ENOENT;

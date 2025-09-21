@@ -139,12 +139,12 @@ void TestTouchUnlinkFile(QFS &qfs)
     const fs::path path = "/testfile";
     Resolved r{};
 
-    if (int status = qfs.touch(path); status == 0)
+    if (int status = qfs.Touch(path); status == 0)
         LogSuccess("Touched {}", path.string());
     else
         LogError("touch {} : {}", path.string(), status);
 
-    if (int status = qfs.resolve(path, r); status == 0)
+    if (int status = qfs.Resolve(path, r); status == 0)
         LogSuccess("Resolved");
     else
         LogError("Can't resolve: {}", status);
@@ -157,7 +157,7 @@ void TestTouchUnlinkFile(QFS &qfs)
     else
         LogError("unlink failed: {}", status);
 
-    if (int status = qfs.resolve(path, r); status == -QUASI_ENOENT)
+    if (int status = qfs.Resolve(path, r); status == -QUASI_ENOENT)
         LogSuccess("Removal confirmed");
     else
         LogError("file not removed: {}", status);
@@ -174,7 +174,7 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("mkdir {} : {}", path.string(), status);
 
-    if (int status = qfs.resolve(path, r); status == 0)
+    if (int status = qfs.Resolve(path, r); status == 0)
         LogSuccess("Resolved");
     else
         LogError("Can't resolve: {}", status);
@@ -187,7 +187,7 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("rmdir failed");
 
-    if (int status = qfs.resolve(path, r); -QUASI_ENOENT == status)
+    if (int status = qfs.Resolve(path, r); -QUASI_ENOENT == status)
         LogSuccess("Removal confirmed");
     else
         LogError("dir not removed: {}", status);
@@ -210,7 +210,7 @@ void TestMount(QFS &qfs)
     qfs.MKDir("/dummy");
     qfs.MKDir("/dummy/mount");
 
-    if (int status = qfs.resolve("/dummy/mount", r); status == 0)
+    if (int status = qfs.Resolve("/dummy/mount", r); status == 0)
         LogSuccess("mkdir'd /dummy/mount");
     else
     {
@@ -230,12 +230,12 @@ void TestMount(QFS &qfs)
 
     Log("\tPre-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root, parent_fileno, self_fileno);
 
-    if (int status = qfs.mount("/dummy/mount", part); status == 0)
+    if (int status = qfs.Mount("/dummy/mount", part); status == 0)
         LogSuccess("Mounted");
     else
         LogError("Can't mount: {}", status);
 
-    if (int status = qfs.resolve("/dummy/mount", r); status == 0)
+    if (int status = qfs.Resolve("/dummy/mount", r); status == 0)
         LogSuccess("After-mount resolved");
     else
         LogError("Can't resolve /dummy/mount after mounting: {}", status);
@@ -251,10 +251,10 @@ void TestMount(QFS &qfs)
         LogError("Bad partition");
     }
 
-    qfs.resolve("/dummy", r);
+    qfs.Resolve("/dummy", r);
     auto parent_from_root_mount = std::static_pointer_cast<Directory>(r.node)->lookup("mount")->GetFileno();
 
-    qfs.resolve("/dummy/mount", r);
+    qfs.Resolve("/dummy/mount", r);
     auto self_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup(".")->GetFileno();
     auto parent_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
 
@@ -306,17 +306,17 @@ void TestMountFileRetention(QFS &qfs)
 
     qfs.MKDir("/mount");
 
-    qfs.touch("/mount/dummy1"); // dummy files to shift fileno
-    qfs.touch("/mount/dummy2");
-    qfs.touch("/mount/dummy3");
-    qfs.touch("/mount/dummy4");
-    qfs.touch("/mount/testfile");
+    qfs.Touch("/mount/dummy1"); // dummy files to shift fileno
+    qfs.Touch("/mount/dummy2");
+    qfs.Touch("/mount/dummy3");
+    qfs.Touch("/mount/dummy4");
+    qfs.Touch("/mount/testfile");
     qfs.MKDir("/mount/testdir");
 
     Resolved rfile{};
     Resolved rdir{};
 
-    if (int status_file = qfs.resolve("/mount/testfile", rfile); 0 == status_file)
+    if (int status_file = qfs.Resolve("/mount/testfile", rfile); 0 == status_file)
         LogSuccess("Test file created");
     else
     {
@@ -324,7 +324,7 @@ void TestMountFileRetention(QFS &qfs)
         return;
     }
 
-    if (int status_dir = qfs.resolve("/mount/testdir", rdir); 0 == status_dir)
+    if (int status_dir = qfs.Resolve("/mount/testdir", rdir); 0 == status_dir)
         LogSuccess("Test directory created");
     else
     {
@@ -337,23 +337,23 @@ void TestMountFileRetention(QFS &qfs)
     Log("\tPre-mount file fileno: {}", ffileno);
     Log("\tPre-mount dir fileno: {}", dfileno);
 
-    qfs.mount("/mount", part);
+    qfs.Mount("/mount", part);
 
-    if (int status_file = qfs.resolve("/mount/testfile", rfile); 0 == status_file && -QUASI_ENOENT == status_file)
+    if (int status_file = qfs.Resolve("/mount/testfile", rfile); 0 == status_file && -QUASI_ENOENT == status_file)
     {
         LogError("Pre-mount file preserved (if 0), or error (if not ENOENT): {}", status_file);
         return;
     }
-    if (int status_dir = qfs.resolve("/mount/testdir", rdir); 0 == status_dir && -QUASI_ENOENT == status_dir)
+    if (int status_dir = qfs.Resolve("/mount/testdir", rdir); 0 == status_dir && -QUASI_ENOENT == status_dir)
     {
         LogError("Pre-mount directory preserved (if 0), or error (if not ENOENT): {}", status_dir);
         return;
     }
 
-    qfs.touch("/mount/testfile_mnt");
+    qfs.Touch("/mount/testfile_mnt");
     qfs.MKDir("/mount/testdir_mnt");
 
-    if (int status_file = qfs.resolve("/mount/testfile_mnt", rfile); -QUASI_ENOENT != status_file)
+    if (int status_file = qfs.Resolve("/mount/testfile_mnt", rfile); -QUASI_ENOENT != status_file)
         LogSuccess("Test file created (mount)");
     else
     {
@@ -361,7 +361,7 @@ void TestMountFileRetention(QFS &qfs)
         return;
     }
 
-    if (int status_dir = qfs.resolve("/mount/testdir_mnt", rdir); -QUASI_ENOENT != status_dir)
+    if (int status_dir = qfs.Resolve("/mount/testdir_mnt", rdir); -QUASI_ENOENT != status_dir)
         LogSuccess("Test dir created (mount)");
     else
     {
@@ -386,8 +386,8 @@ void TestMountFileRetention(QFS &qfs)
 
     qfs.Unmount("/mount");
 
-    qfs.resolve("/mount/testfile", rfile);
-    qfs.resolve("/mount/testdir", rdir);
+    qfs.Resolve("/mount/testfile", rfile);
+    qfs.Resolve("/mount/testdir", rdir);
     auto ffileno_unmount = rfile.node->GetFileno();
     auto dfileno_unmount = rdir.node->GetFileno();
     Log("\tAfter unmount: /mount/testfile fileno: {}", ffileno);
@@ -399,12 +399,12 @@ void TestMountFileRetention(QFS &qfs)
     if (dfileno != dfileno_unmount)
         LogError("Directory changed after mount cycle. Before: {}, after: {}", dfileno, dfileno_unmount);
 
-    if (int status_file = qfs.resolve("/mount/testfile_mnt", rfile); -QUASI_ENOENT == status_file)
+    if (int status_file = qfs.Resolve("/mount/testfile_mnt", rfile); -QUASI_ENOENT == status_file)
         LogSuccess("Mountpoint file doesn't exist");
     else
         LogError("Mountpoint file persisted");
 
-    if (int status_dir = qfs.resolve("/mount/testdir_mnt", rdir); -QUASI_ENOENT == status_dir)
+    if (int status_dir = qfs.Resolve("/mount/testdir_mnt", rdir); -QUASI_ENOENT == status_dir)
         LogSuccess("Mountpoint dir doesn't exist");
     else
         LogError("Mountpoint directory persisted");
@@ -416,8 +416,8 @@ void TestStLinkFile(QFS &qfs)
 
     Resolved r{};
 
-    qfs.touch("/file");
-    qfs.resolve("/file", r);
+    qfs.Touch("/file");
+    qfs.Resolve("/file", r);
 
     file_ptr f = std::reinterpret_pointer_cast<RegularFile>(r.node);
 
@@ -473,7 +473,7 @@ void TestStLinkDir(QFS &qfs)
     Resolved r{};
 
     qfs.MKDir("/dir");
-    qfs.resolve("/dir", r);
+    qfs.Resolve("/dir", r);
 
     file_ptr f = std::reinterpret_pointer_cast<RegularFile>(r.node);
 
@@ -550,7 +550,7 @@ void TestFileOpen(QFS &qfs)
         LogError("O_READ | O_CREAT, nonexistent file: {}", status);
 
     //
-    if (-QUASI_ENOENT == qfs.resolve("/file_open", r))
+    if (-QUASI_ENOENT == qfs.Resolve("/file_open", r))
         LogError("O_CREAT didn't create the file");
     //
 
@@ -616,7 +616,7 @@ void TestDirOpen(QFS &qfs)
         LogError("existing dir, O_RDONLY: {}", status);
 
     //
-    qfs.touch("/notadir");
+    qfs.Touch("/notadir");
     //
 
     if (int status = qfs.Open("/notadir", O_DIRECTORY,0); -QUASI_ENOTDIR == status)

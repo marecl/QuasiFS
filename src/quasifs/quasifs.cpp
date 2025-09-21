@@ -8,6 +8,7 @@
 #include "include/quasifs_partition.h"
 #include "include/quasifs.h"
 
+#include "../log.h"
 namespace QuasiFS
 {
 
@@ -18,7 +19,7 @@ namespace QuasiFS
         this->block_devices[this->rootfs->GetBlkId()] = this->rootfs;
     }
 
-    int QFS::resolve(fs::path path, Resolved &r)
+    int QFS::Resolve(fs::path path, Resolved &r)
     {
         // on return:
         // node - last element of the path (if exists)
@@ -35,7 +36,7 @@ namespace QuasiFS
 
         do
         {
-            status = r.mountpoint->resolve(path, r);
+            status = r.mountpoint->Resolve(path, r);
 
             if (0 != status)
                 return status;
@@ -44,7 +45,7 @@ namespace QuasiFS
             {
                 // symlink holds absolute path, so we need to start over.
                 // it may be a file or a directory, but if it's in the middle - it has to be a directory.
-                // when it's a part of the path, `resolve` returns null parent (it's unused anyways), and leaf is
+                // when it's a part of the path, `Resolve` returns null parent (it's unused anyways), and leaf is
                 // remaining (uniterated) path.
 
                 // for example, there are 2 paths:
@@ -101,13 +102,13 @@ namespace QuasiFS
     }
 
     // mount fs at path (target must exist and be directory)
-    int QFS::mount(const fs::path &path, partition_ptr fs)
+    int QFS::Mount(const fs::path &path, partition_ptr fs)
     {
         if (nullptr != GetPartitionByBlockdev(fs->GetBlkId()))
             return -QUASI_EEXIST;
 
         Resolved res{};
-        int status = resolve(path, res);
+        int status = Resolve(path, res);
 
         if (0 != status)
             return status;
@@ -130,7 +131,7 @@ namespace QuasiFS
     int QFS::Unmount(const fs::path &path)
     {
         Resolved res{};
-        int status = resolve(path, res);
+        int status = Resolve(path, res);
 
         if (0 != status)
             return status;
@@ -150,30 +151,43 @@ namespace QuasiFS
         return 0;
     }
 
-  
+    int QFS::MapHost(const fs::path &local, const fs::path &host)
+    {
+        Resolved r{};
+        int status = Resolve(local, r);
+
+        if (0 != status)
+            return status;
 
 
+        const fs::path existing_host_path = GetHostPathByInode(r.node);
 
+        if (!existing_host_path.empty())
+            return -EEXIST;
 
+        Log("Mapping local {} to hosts {}", local.string(), host.string());
+        this->host_files[r.node] = host;
+        return 0;
+    }
 
     // create file at path (creates entry in parent dir). returns 0 or negative errno
-    int QFS::touch(const fs::path &path)
+    int QFS::Touch(const fs::path &path)
     {
         fs::path base = path.parent_path();
         std::string fname = path.filename();
 
-        return touch(base, fname);
+        return Touch(base, fname);
     }
 
-    int QFS::touch(const fs::path &path, const std::string &name)
+    int QFS::Touch(const fs::path &path, const std::string &name)
     {
-        return touch(path, name, RegularFile::Create());
+        return Touch(path, name, RegularFile::Create());
     }
 
-    int QFS::touch(const fs::path &path, const std::string &name, file_ptr child)
+    int QFS::Touch(const fs::path &path, const std::string &name, file_ptr child)
     {
         Resolved res{};
-        int ret = resolve(path, res);
+        int ret = Resolve(path, res);
 
         if (0 != ret)
             return ret;
@@ -184,17 +198,15 @@ namespace QuasiFS
         return fsblk->touch(dir, name, child);
     }
 
-
-
-    int QFS::mkdir(const fs::path &path, const std::string &name)
+    int QFS::MKDir(const fs::path &path, const std::string &name)
     {
-        return mkdir(path, name, Directory::Create());
+        return MKDir(path, name, Directory::Create());
     }
 
-    int QFS::mkdir(const fs::path &path, const std::string &name, dir_ptr child)
+    int QFS::MKDir(const fs::path &path, const std::string &name, dir_ptr child)
     {
         Resolved res{};
-        int status = resolve(path, res);
+        int status = Resolve(path, res);
 
         if (0 != status)
             return status;
@@ -206,32 +218,6 @@ namespace QuasiFS
         dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
 
         return fsblk->mkdir(dir, name, child);
-    }
-
-    int QFS::rmdir(const fs::path &path)
-    {
-        Resolved res{};
-        int status = resolve(path, res);
-
-        if (0 != status)
-            return status;
-
-        dir_ptr parent = res.parent;
-
-        if (parent->mounted_root)
-            return -QUASI_EBUSY;
-
-        if (0 == parent->unlink(res.leaf))
-            return res.mountpoint->rmInode(res.node);
-        return 0;
-    }
-
-
-    // Note: target may not exist and symlink will be created
-    int QFS::symlink(const fs::path path, const fs::path target)
-    {
-        // unimplemented
-        return -QUASI_EINVAL;
     }
 
     int QFS::GetFreeHandleNo()
@@ -258,7 +244,7 @@ namespace QuasiFS
     fs::path QFS::GetHostPathByPath(const fs::path &path)
     {
         Resolved r{};
-        if (0 != this->resolve(path, r))
+        if (0 != this->Resolve(path, r))
             return {};
         return GetHostPathByInode(r.node);
     }

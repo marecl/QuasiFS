@@ -85,7 +85,7 @@ namespace QuasiFS
         return 0;
     }
 
-    Stat Directory::getattr()
+    quasi_stat_t Directory::getattr()
     {
         // st_size: arbitrary number of entries * 32
         st.st_size = entries.size() * 32;

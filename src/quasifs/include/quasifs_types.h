@@ -56,7 +56,7 @@ namespace QuasiFS
 #define st_ctime st_ctim.tv_sec
     };
 
-    using Stat = struct quasi_stat_t;
+    // using Stat = struct quasi_stat_t;
 
     typedef struct File File;
     using fd_handle_ptr = std::shared_ptr<File>;
@@ -66,7 +66,7 @@ namespace QuasiFS
         File() = default;
         ~File() = default;
         fs::path path{};  // qfs path
-        int host_fd{-1};  // fd if used with host_io
+        int host_fd{-1};  // fd if opened with HostIO
         inode_ptr node{}; // inode
         bool read{};      // read permission
         bool write{};     // write permission
