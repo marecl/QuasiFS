@@ -12,7 +12,6 @@ namespace QuasiFS
     private:
         fileno_t NextFileno(void) { return this->next_fileno++; };
 
-
         // file list
         std::unordered_map<fileno_t, inode_ptr> inode_table{};
 
@@ -22,16 +21,30 @@ namespace QuasiFS
 
         static inline blkid_t next_block_id = 1;
 
+        const fs::path host_root{};
+
     public:
-        Partition();
+        Partition(const fs::path &host_root = "");
         ~Partition() = default;
 
-        static partition_ptr Create(void)
+        template <typename... Args>
+        static partition_ptr Create(Args &&...args)
         {
-            return std::make_shared<Partition>();
+            return std::make_shared<Partition>(std::forward<Args>(args)...);
+        }
+
+        fs::path SanitizePath(const fs::path &path)
+        {
+            fs::path tmp = path.lexically_normal();
+            if (tmp.string().find(this->host_root, 0) == 0)
+                return tmp;
+                
+            return {};
         }
 
         dir_ptr GetRoot(void) { return this->root; };
+        bool IsHostMounted(void) { return !this->host_root.empty(); };
+        fs::path GetHostRoot(void) { return this->host_root; };
         blkid_t GetBlkId(void) { return this->block_id; };
         inode_ptr GetInodeByFileno(fileno_t fileno);
 
@@ -57,7 +70,7 @@ namespace QuasiFS
 
         static void mkrelative(dir_ptr parent, dir_ptr child);
 
-        int unlink(dir_ptr parent, const std::string& child);
+        int unlink(dir_ptr parent, const std::string &child);
     };
 
 };

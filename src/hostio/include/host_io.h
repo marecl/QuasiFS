@@ -12,6 +12,7 @@ using HostIOBase = HostIODriver::HostIO_Base;
 #ifdef __linux__
 using HostIO = HostIODriver::HostIO_POSIX;
 #elif _WIN32
+#warning Contributors needed
 using HostIO = HostIODriver::HostIO_Win32;
 #else
 #warning This architecture isn't supported by HostIO

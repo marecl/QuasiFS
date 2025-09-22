@@ -182,7 +182,30 @@ void TestMkRmdir(QFS &qfs)
     if (r.parent != qfs.GetRoot())
         LogError("Wrong parent");
 
-    if (int status = qfs.rmdir(path); status == 0)
+    if (int status = qfs.RMDir(path); status == 0)
+        LogSuccess("rmdir'd");
+    else
+        LogError("rmdir failed");
+
+    if (int status = qfs.Resolve(path, r); -QUASI_ENOENT == status)
+        LogSuccess("Removal confirmed");
+    else
+        LogError("dir not removed: {}", status);
+
+    qfs.MKDir("/dir1");
+    path = "/dir1/dir2";
+
+    if (int status = qfs.MKDir(path); status == 0)
+        LogSuccess("mkdir'd {}", path.string());
+    else
+        LogError("mkdir {} : {}", path.string(), status);
+
+    if (int status = qfs.Resolve(path, r); status == 0)
+        LogSuccess("Resolved");
+    else
+        LogError("Can't resolve: {}", status);
+
+    if (int status = qfs.RMDir(path); status == 0)
         LogSuccess("rmdir'd");
     else
         LogError("rmdir failed");
@@ -294,8 +317,8 @@ void TestMount(QFS &qfs)
     else
         LogError("Can't unmount: {}", status);
 
-    qfs.rmdir("/dummy/mount");
-    qfs.rmdir("/dummy");
+    qfs.RMDir("/dummy/mount");
+    qfs.RMDir("/dummy");
 }
 
 void TestMountFileRetention(QFS &qfs)
@@ -499,7 +522,7 @@ void TestStLinkDir(QFS &qfs)
     else
         LogError("Dir with subdir nlink {} != 3", *nlink);
 
-    if (int status = qfs.rmdir("/dir/dir2"); 0 == status)
+    if (int status = qfs.RMDir("/dir/dir2"); 0 == status)
         LogSuccess("subdir unlinked");
     else
         LogError("Unlink subdir failed: {}", status);
@@ -509,7 +532,7 @@ void TestStLinkDir(QFS &qfs)
     else
         LogError("Dir nlink didn't decrease after removing subdir nlink: {} != 2", *nlink);
 
-    if (int status = qfs.rmdir("/dir"); 0 == status)
+    if (int status = qfs.RMDir("/dir"); 0 == status)
         LogSuccess("subdir unlinked");
     else
         LogError("Unlink subdir failed: {}", status);
@@ -533,7 +556,7 @@ void TestFileOpen(QFS &qfs)
 
     Resolved r{};
 
-    if (int status = qfs.Open("/file_open", 0,0); -QUASI_ENOENT == status)
+    if (int status = qfs.Open("/file_open", 0, 0); -QUASI_ENOENT == status)
     {
         LogSuccess("nonexistent file, O_READ");
         qfs.Close(status);
@@ -541,7 +564,7 @@ void TestFileOpen(QFS &qfs)
     else
         LogError("O_READ, nonexistent file: {}", status);
 
-    if (int status = qfs.Open("/file_open", O_CREAT,0); 0 == status)
+    if (int status = qfs.Open("/file_open", O_CREAT, 0); 0 == status)
     {
         LogSuccess("nonexistent file, O_READ | O_CREAT");
         qfs.Close(status);
@@ -554,7 +577,7 @@ void TestFileOpen(QFS &qfs)
         LogError("O_CREAT didn't create the file");
     //
 
-    if (int status = qfs.Open("/file_open", O_RDWR,0); 0 == status)
+    if (int status = qfs.Open("/file_open", O_RDWR, 0); 0 == status)
     {
         LogSuccess("existing file, O_RDWR");
         qfs.Close(status);
@@ -564,7 +587,7 @@ void TestFileOpen(QFS &qfs)
 
     // Edge case - undefined in POSIX
     // We can open the file for reading only and truncate it anyway
-    if (int status = qfs.Open("/file_open", O_RDONLY | O_TRUNC,0); 0 == status)
+    if (int status = qfs.Open("/file_open", O_RDONLY | O_TRUNC, 0); 0 == status)
     {
         LogSuccess("existing file, O_RDONLY | O_TRUNC");
         qfs.Close(status);
@@ -579,7 +602,7 @@ void TestDirOpen(QFS &qfs)
 
     Resolved r{};
 
-    if (int status = qfs.Open("/dir_open", O_DIRECTORY,0); -QUASI_ENOENT == status)
+    if (int status = qfs.Open("/dir_open", O_DIRECTORY, 0); -QUASI_ENOENT == status)
     {
         LogSuccess("nonexistent dir, O_READ | O_DIRECTORY");
         qfs.Close(status);
@@ -587,7 +610,7 @@ void TestDirOpen(QFS &qfs)
     else
         LogError("nonexistent dir, O_READ | O_DIRECTORY: {}", status);
 
-    if (int status = qfs.Open("/dir_open", O_DIRECTORY | O_WRONLY,0); -QUASI_ENOENT == status)
+    if (int status = qfs.Open("/dir_open", O_DIRECTORY | O_WRONLY, 0); -QUASI_ENOENT == status)
     {
         LogSuccess("nonexistent dir, O_WRONLY | O_DIRECTORY");
         qfs.Close(status);
@@ -599,7 +622,7 @@ void TestDirOpen(QFS &qfs)
     qfs.MKDir("/dir_open");
     //
 
-    if (int status = qfs.Open("/dir_open", O_DIRECTORY,0); 0 == status)
+    if (int status = qfs.Open("/dir_open", O_DIRECTORY, 0); 0 == status)
     {
         LogSuccess("existing dir, O_RDONLY | O_DIRECTORY");
         qfs.Close(status);
@@ -607,7 +630,7 @@ void TestDirOpen(QFS &qfs)
     else
         LogError("existing dir, O_RDONLY | O_DIRECTORY: {}", status);
 
-    if (int status = qfs.Open("/dir_open", 0,0); 0 == status)
+    if (int status = qfs.Open("/dir_open", 0, 0); 0 == status)
     {
         LogSuccess("existing dir, O_RDONLY");
         qfs.Close(status);
@@ -619,7 +642,7 @@ void TestDirOpen(QFS &qfs)
     qfs.Touch("/notadir");
     //
 
-    if (int status = qfs.Open("/notadir", O_DIRECTORY,0); -QUASI_ENOTDIR == status)
+    if (int status = qfs.Open("/notadir", O_DIRECTORY, 0); -QUASI_ENOTDIR == status)
     {
         LogSuccess("not a dir, O_DIRECTORY");
         qfs.Close(status);

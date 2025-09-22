@@ -19,9 +19,9 @@ namespace QuasiFS
             return std::make_shared<RegularFile>();
         }
 
-        ssize_t read(off_t offset, void *buf, size_t count) override;
-        ssize_t write(off_t offset, const void *buf, size_t count) override;
-        int truncate(off_t length) { return -QUASI_ENOSYS; }
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
+        int truncate(quasi_off_t length) { return -QUASI_ENOSYS; }
     };
 
 }

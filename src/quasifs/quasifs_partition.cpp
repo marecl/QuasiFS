@@ -1,3 +1,5 @@
+#include <sys/sysmacros.h>
+
 #include "include/quasi_errno.h"
 #include "include/quasifs_types.h"
 
@@ -8,19 +10,12 @@
 
 namespace QuasiFS
 {
-
-    Partition::Partition() : block_id(next_block_id++)
+    Partition::Partition(const fs::path &host_root) : block_id(next_block_id++), host_root(host_root.lexically_normal())
     {
         this->root = Directory::Create();
         IndexInode(this->root);
         mkrelative(this->root, this->root);
     };
-
-    static partition_ptr Create(void)
-    {
-        partition_ptr part = std::make_shared<Partition>();
-        return part;
-    }
 
     int Partition::Resolve(fs::path &path, Resolved &r)
     {
@@ -148,7 +143,7 @@ namespace QuasiFS
 
         if (node->st.st_nlink > 0)
             return 0;
-            
+
         // TODO: check for open file handles, return -QUASI_EEBUSY
 
         this->inode_table.erase(node->GetFileno());

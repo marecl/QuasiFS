@@ -7,7 +7,7 @@
 #include "dev/include/dev_std.h"
 
 #include "log.h"
-// #include "tests.h"
+#include "tests.h"
 #include <filesystem>
 using namespace QuasiFS;
 
@@ -15,15 +15,20 @@ int main()
 {
     QFS v;
 
-    Log("{}", std::filesystem::absolute(".").string());
+    partition_ptr host_partition = Partition::Create(fs::absolute("."));
 
-    v.MKDir("/host");
-    v.MapHost("/host", "./");
-    v.MKDir("/host/hehe");
-    v.Creat("/host/hehe/qweqwe.txt");
-    v.Creat("/host/zxczxc.txt");
+    Log("{}", host_partition->GetHostRoot().string());
 
-    // Test(v);
+    int status;
+    status = v.MKDir("/host");
+    status = v.Mount("/host", host_partition);
+
+    status = v.MKDir("/host/hehe");
+    status = v.MKDir("/host/hehe/hihihi");
+    status = v.Creat("/host/hehe/qweqwe.txt");
+    status = v.Creat("/host/hehe/hihihi/zxczxc.txt");
+
+    //     Test(v);
 
     // QFS vv;
     // vv.MKDir("/dev");

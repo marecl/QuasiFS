@@ -6,6 +6,7 @@
 
 namespace Devices
 {
+    using namespace QuasiFS;
 
     class DevStdout : public QuasiFS::RegularFile
     {
@@ -13,8 +14,8 @@ namespace Devices
         DevStdout() = default;
         ~DevStdout() = default;
 
-        ssize_t read(off_t offset, void *buf, size_t count) override;
-        ssize_t write(off_t offset, const void *buf, size_t count) override;
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
     class DevStdin : public QuasiFS::RegularFile
@@ -23,8 +24,8 @@ namespace Devices
         DevStdin() = default;
         ~DevStdin() = default;
 
-        ssize_t read(off_t offset, void *buf, size_t count) override;
-        ssize_t write(off_t offset, const void *buf, size_t count) override;
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
     class DevStderr : public QuasiFS::RegularFile
@@ -33,8 +34,8 @@ namespace Devices
         DevStderr() = default;
         ~DevStderr() = default;
 
-        ssize_t read(off_t offset, void *buf, size_t count) override;
-        ssize_t write(off_t offset, const void *buf, size_t count) override;
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
     class DevRandom : public QuasiFS::RegularFile
@@ -43,8 +44,8 @@ namespace Devices
         DevRandom() = default;
         ~DevRandom() = default;
 
-        ssize_t read(off_t offset, void *buf, size_t count) override;
-        ssize_t write(off_t offset, const void *buf, size_t count) override;
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
     class DevZero : public QuasiFS::RegularFile
@@ -53,8 +54,8 @@ namespace Devices
         DevZero() = default;
         ~DevZero() = default;
 
-        ssize_t read(off_t offset, void *buf, size_t count) override;
-        ssize_t write(off_t offset, const void *buf, size_t count) override;
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
     class DevNull : public QuasiFS::RegularFile
@@ -63,7 +64,7 @@ namespace Devices
         DevNull() = default;
         ~DevNull() = default;
 
-        ssize_t read(off_t offset, void *buf, size_t count) override;
-        ssize_t write(off_t offset, const void *buf, size_t count) override;
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 }

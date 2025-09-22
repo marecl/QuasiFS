@@ -36,10 +36,24 @@ Hard-links and symlinks to simplify access.
 Hardlinks are available only in scope of the local partition.  
 Symlinks are cross-partition, but handled only by `QFS`.  
 
+## Host integration
+It's now possible to bind host's directories to QFS Partition.  
+Experimental feature, proceed with caution.
+This makes QFS have obfuscated access to *virtually any* location on your machine.  
+There may (or may not) be safeguards against breaking out from specified path.  
+Use at your own risk.
+
+### Current safeguards
+`QUASI_EPERM` on accessing path on lower level than assigned to the partition.
+Example: `Partition` is assigned to `/home/user/application/filesystem`. Application has access to everything in that folder, which is referred to as root, i.e. `/` operates in root of the assigned directory.
+App may try to open malicious locations like `../../.bashrc` to have access to user files. This call would (should) be caught, since `/home/user` is below assigned path.
+
 # TODO
 * Add more file types (block, char, etc.)  
 * File timestamps  
-* Host-mounted files  
+* [WIP] Host-mounted files  
+    * Normalize paths (remove relative operators)
+    * Add top-level limit path (prohibit going beyond a certain path)
 * Permissions  
 * Flexible (and realistic) fileno and blockdev values
 * Dirents

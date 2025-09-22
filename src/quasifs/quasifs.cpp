@@ -33,6 +33,7 @@ namespace QuasiFS
         int status{-1};
 
         r.mountpoint = this->rootfs;
+        r.local_path = path;
 
         do
         {
@@ -83,6 +84,7 @@ namespace QuasiFS
                         return -QUASI_ENOENT;
 
                     r.mountpoint = mounted_partition;
+                    r.local_path = path;
                     r.parent = mntparent;
                     r.node = mntroot;
 
@@ -148,25 +150,6 @@ namespace QuasiFS
         dir->mounted_root = nullptr;
         this->block_devices.erase(res.mountpoint->GetBlkId());
 
-        return 0;
-    }
-
-    int QFS::MapHost(const fs::path &local, const fs::path &host)
-    {
-        Resolved r{};
-        int status = Resolve(local, r);
-
-        if (0 != status)
-            return status;
-
-
-        const fs::path existing_host_path = GetHostPathByInode(r.node);
-
-        if (!existing_host_path.empty())
-            return -EEXIST;
-
-        Log("Mapping local {} to hosts {}", local.string(), host.string());
-        this->host_files[r.node] = host;
         return 0;
     }
 
@@ -239,22 +222,6 @@ namespace QuasiFS
         if (target_blkdev == this->block_devices.end())
             return nullptr;
         return target_blkdev->second;
-    }
-
-    fs::path QFS::GetHostPathByPath(const fs::path &path)
-    {
-        Resolved r{};
-        if (0 != this->Resolve(path, r))
-            return {};
-        return GetHostPathByInode(r.node);
-    }
-
-    fs::path QFS::GetHostPathByInode(inode_ptr node)
-    {
-        auto target_path = this->host_files.find(node);
-        if (target_path == this->host_files.end())
-            return {};
-        return target_path->second;
     }
 
 };

@@ -152,5 +152,3 @@
 #define QUASI_ERFKILL 132 /* Operation not possible due to RF-kill */
 
 #define QUASI_EHWPOISON 133 /* Memory page has hardware error */
-
-using errno_t = uint8_t;

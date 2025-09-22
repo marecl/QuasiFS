@@ -2,12 +2,6 @@
 
 #ifdef __linux__
 
-#include <cstdint>
-#include <cstdio>
-#include <sys/unistd.h>
-#include <sys/fcntl.h>
-#include <sys/stat.h>
-
 #include "host_io_base.h"
 
 namespace HostIODriver
@@ -17,7 +11,7 @@ namespace HostIODriver
     {
 
     public:
-        constexpr int ToSeekOrigin(QuasiFS::SeekOrigin origin)
+        static constexpr int ToSeekOrigin(QuasiFS::SeekOrigin origin)
         {
             switch (origin)
             {
@@ -32,12 +26,12 @@ namespace HostIODriver
             }
         }
 
-        constexpr int ToOpenFlags(int quasi_flags)
+        static constexpr int ToOpenFlags(int quasi_flags)
         {
             return quasi_flags;
         }
 
-        constexpr int ToOpenMode(int quasi_mode)
+        static constexpr mode_t ToOpenMode(quasi_mode_t quasi_mode)
         {
             return quasi_mode;
         }
@@ -47,24 +41,25 @@ namespace HostIODriver
         //
 
         // remember to change mode back to parameter
-        int Open(const fs::path &path, int flags, mode_t mode = 0755) { return open(path.string().c_str(), flags, mode); };
-        int Creat(const fs::path &path, mode_t mode = 0755) { return creat(path.string().c_str(), mode); };
-        int Close(const int fd) { return close(fd); };
+        int Open(const fs::path &path, int flags, quasi_mode_t mode=0755);
+        int Creat(const fs::path &path, quasi_mode_t mode=0755);
+        int Close(const int fd);
 
-        // int Unlink(const fs::path &path) { return -1; };
-        // int Flush(const int fd) { return -1; };
-        // int FSync(const int fd) { return -1; };
-        // int FTruncate(const int fd, size_t size) { return -1; };
-        // off_t LSeek(const int fd, off_t offset, QuasiFS::SeekOrigin origin) { return -1; };
-        // ssize_t Tell(int fd) { return -1; };
-        ssize_t Write(int fd, const void *buf, size_t count) { return write(fd, buf, count); };
-        ssize_t PWrite(int fd, const void *buf, size_t count, off_t offset) { return pwrite(fd, buf, count, offset); };
-        ssize_t Read(int fd, void *buf, size_t count) { return read(fd, buf, count); };
-        ssize_t PRead(int fd, void *buf, size_t count, off_t offset) { return pread(fd, buf, count, offset); }
-        int MKDir(const fs::path &path, int mode = 0755) { return mkdir(path.string().c_str(), mode); };
+        int Unlink(const fs::path &path);
+        int Flush(const int fd);
+        int FSync(const int fd);
+        int Truncate(const fs::path &path, quasi_size_t size);
+        int FTruncate(const int fd, quasi_size_t size);
+        quasi_off_t LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin);
+        quasi_ssize_t Tell(const int fd);
+        quasi_ssize_t Write(const int fd, const void *buf, quasi_size_t count);
+        quasi_ssize_t PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset);
+        quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count);
+        quasi_ssize_t PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset);
+        int MKDir(const fs::path &path, quasi_mode_t mode=0755);
 
-        // int Stat(fs::path &path, QuasiFS::quasi_stat_t *stat) { return -1; };
-        // int FStat(int fd, QuasiFS::quasi_stat_t *statbuf) { return -1; };
+        int Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf);
+        int FStat(const int fd, QuasiFS::quasi_stat_t *statbuf);
     };
 }
 

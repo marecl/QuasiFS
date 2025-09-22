@@ -12,3 +12,5 @@ target_include_directories(quasifs_lib
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+target_link_libraries(quasifs_lib PRIVATE host_io_lib)

@@ -1,4 +1,4 @@
-#include "quasi_errno.h"
+#include "include/quasi_errno.h"
 #include "include/quasifs_types.h"
 
 #include "include/quasifs_inode_directory.h"
@@ -6,12 +6,13 @@
 #include "include/quasifs_inode_symlink.h"
 #include "include/quasifs_partition.h"
 #include "include/quasifs.h"
+
 #include "../log.h"
 
 namespace QuasiFS
 {
 
-    int QFS::Open(const fs::path &path, int flags, mode_t mode)
+    int QFS::Open(const fs::path &path, int flags, quasi_mode_t mode)
     {
         Resolved r{};
         int status = this->Resolve(path, r);
@@ -76,41 +77,40 @@ namespace QuasiFS
         return next_free_handle;
     }
 
-    int QFS::Creat(const fs::path &path, mode_t mode)
+    int QFS::Creat(const fs::path &path, quasi_mode_t mode)
     {
         Resolved r{};
         fs::path dirtree = path.parent_path();
         fs::path leaf = path.filename();
-        int status = this->Resolve(path, r);
+        int status = this->Resolve(dirtree, r);
 
-        // catch what if target exists and is not a file!
-        if (-QUASI_ENOENT != status)
+        // // catch what if target exists and is not a file!
+        if (nullptr == r.node)
             // parent node must exist
             return status;
 
-        dir_ptr parent_node = r.parent;
-        fs::path host_path_target = GetHostPathByInode(parent_node);
+        partition_ptr part = r.mountpoint;
+        dir_ptr parent_node = std::static_pointer_cast<Directory>(r.node);
 
-        if (!host_path_target.empty())
+        if (part->IsHostMounted())
         {
+            fs::path host_path_target = part->SanitizePath(part->GetHostRoot() / r.local_path);
+            if (host_path_target.empty())
+            {
+                LogError("Malicious path detected: {}", (part->GetHostRoot() / r.local_path).string());
+                return -QUASI_EPERM;
+            }
             Log("Resolving local {} to hosts {}", path.string(), (host_path_target / leaf).string());
-
-            status = driver.Creat(host_path_target / leaf, mode);
+            status = this->driver.Creat(host_path_target / leaf, mode);
 
             if (status != 0)
                 // hosts operation must succeed in order to continue
                 return status;
         }
 
+        // if host succeeded, we hope this will too o.o
         file_ptr new_file = RegularFile::Create();
-        status = r.mountpoint->touch(parent_node, leaf, new_file);
-
-        if (0 != status)
-            // if host succeeded, this must too
-            return status;
-
-        if (!host_path_target.empty())
-            this->host_files[new_file] = host_path_target;
+        return r.mountpoint->touch(parent_node, leaf, new_file);
 
         return 0;
     };
@@ -174,7 +174,7 @@ namespace QuasiFS
         return -QUASI_EINVAL;
     };
 
-    int QFS::Truncate(const fs::path &path, size_t length)
+    int QFS::Truncate(const fs::path &path, quasi_size_t length)
     {
         Resolved r{};
         int status = Resolve(path, r);
@@ -185,7 +185,7 @@ namespace QuasiFS
         return -QUASI_EINVAL;
     }
 
-    int QFS::FTruncate(int fd, size_t length)
+    int QFS::FTruncate(const int fd, quasi_size_t length)
     {
         if (0 > fd || fd >= this->open_fd.size())
             return -QUASI_EBADF;
@@ -197,27 +197,27 @@ namespace QuasiFS
         return -QUASI_EBADF;
     }
 
-    off_t QFS::LSeek(const int fd, off_t offset, SeekOrigin origin)
+    quasi_off_t QFS::LSeek(const int fd, quasi_off_t offset, SeekOrigin origin)
     { // stub
         return -QUASI_EINVAL;
     };
 
-    ssize_t QFS::Tell(int fd)
+    quasi_ssize_t QFS::Tell(int fd)
     { // stub
         return -QUASI_EINVAL;
     };
 
-    ssize_t QFS::Write(int fd, const void *buf, size_t count)
+    quasi_ssize_t QFS::Write(const int fd, const void *buf, quasi_size_t count)
     {
         return PWrite(fd, buf, count, 0);
     }
 
-    ssize_t QFS::PWrite(int fd, const void *buf, size_t count, off_t offset)
+    quasi_ssize_t QFS::PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
     { // stub
         return -QUASI_EINVAL;
     };
 
-    // ssize_t QFS::pwrite(int fd, const void *buf, size_t count, off_t offset)
+    // quasi_ssize_t QFS::pwrite(int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
     // {
     //     if (0 > fd || fd >= this->open_fd.size())
     //         return -QUASI_EBADF;
@@ -232,17 +232,17 @@ namespace QuasiFS
     //     return -QUASI_EBADF;
     // }
 
-    ssize_t QFS::Read(int fd, void *buf, size_t count)
+    quasi_ssize_t QFS::Read(const int fd, void *buf, quasi_size_t count)
     {
         return PRead(fd, buf, count, 0);
     }
 
-    ssize_t QFS::PRead(int fd, const void *buf, size_t count, off_t offset)
+    quasi_ssize_t QFS::PRead(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
     { // stub
         return -QUASI_EINVAL;
     };
 
-    // ssize_t QFS::pread(int fd, void *buf, size_t count, off_t offset)
+    // quasi_ssize_t QFS::pread(int fd, void *buf, quasi_size_t count, quasi_off_t offset)
     // {
     //     if (0 > fd || fd >= this->open_fd.size())
     //         return -QUASI_EBADF;
@@ -269,14 +269,16 @@ namespace QuasiFS
             // parent node must exist
             return status;
 
+        partition_ptr part = r.mountpoint;
         dir_ptr parent_node = r.parent;
-        fs::path host_path_parent = GetHostPathByInode(parent_node);
 
-        if (!host_path_parent.empty())
+        if (part->IsHostMounted())
         {
-            Log("Resolving local {} to hosts {}", path.string(), (host_path_parent / leaf).string());
-            status = driver.MKDir(host_path_parent / leaf);
-            if (0 != status)
+            fs::path host_path_target = part->GetHostRoot() / r.local_path;
+            Log("Resolving local {} to hosts {}", path.string(), host_path_target.string());
+            status = this->driver.MKDir(host_path_target);
+            if (status != 0)
+                // hosts operation must succeed in order to continue
                 return status;
         }
 
@@ -288,8 +290,8 @@ namespace QuasiFS
         if (0 != status)
             return status;
 
-        if (!host_path_parent.empty())
-            this->host_files[new_dir] = host_path_parent / leaf;
+        // if (!host_path_parent.empty())
+        //     this->host_files[new_dir] = host_path_parent / leaf;
 
         return 0;
     }
@@ -312,12 +314,12 @@ namespace QuasiFS
         return 0;
     }
 
-    int QFS::Stat(fs::path &path, quasi_stat_t *stat)
+    int QFS::Stat(const fs::path &path, quasi_stat_t *stat)
     { // stub
         return -QUASI_EINVAL;
     }
 
-    int QFS::FStat(int fd, quasi_stat_t *statbuf)
+    int QFS::FStat(const int fd, quasi_stat_t *statbuf)
     { // stub
         return -QUASI_EINVAL;
     }

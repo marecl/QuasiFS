@@ -8,14 +8,14 @@ namespace QuasiFS
 
     RegularFile::RegularFile()
     {
-        st.st_mode = 0000644 | S_IFREG;
+        st.st_mode = 0000755 | S_IFREG;
         st.st_nlink = 0;
     }
 
-    ssize_t RegularFile::read(off_t offset, void *buf, size_t count)
+    quasi_ssize_t RegularFile::read(quasi_off_t offset, void *buf, quasi_size_t count)
     {
-        size_t idx = 0;
-        size_t max = this->data.size();
+        quasi_size_t idx = 0;
+        quasi_size_t max = this->data.size();
         max = count < max ? count : max;
 
         std::cout << "Reading from file: ";
@@ -31,7 +31,7 @@ namespace QuasiFS
         return max;
     }
 
-    ssize_t RegularFile::write(off_t offset, const void *buf, size_t count)
+    quasi_ssize_t RegularFile::write(quasi_off_t offset, const void *buf, quasi_size_t count)
     {
         std::cout << "Writing to file: ";
         for (size_t idx = 0; idx < count; idx++)
