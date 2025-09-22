@@ -3,6 +3,7 @@
 #include <unordered_map>
 
 #include "quasifs_types.h"
+#include "../../log.h"
 
 namespace QuasiFS
 {
@@ -38,14 +39,27 @@ namespace QuasiFS
             fs::path tmp = path.lexically_normal();
             if (tmp.string().find(this->host_root, 0) == 0)
                 return tmp;
-                
+
             return {};
         }
 
-        dir_ptr GetRoot(void) { return this->root; };
-        bool IsHostMounted(void) { return !this->host_root.empty(); };
-        fs::path GetHostRoot(void) { return this->host_root; };
-        blkid_t GetBlkId(void) { return this->block_id; };
+        fs::path GetHostPath(const fs::path &local_path = "/")
+        {
+            fs::path host_path_target = (this->GetHostRoot() / local_path.lexically_relative("/")).lexically_normal();
+            fs::path host_path_target_sanitized = SanitizePath(host_path_target);
+            if (host_path_target_sanitized.empty())
+            {
+                LogError("Malicious path detected: {}", host_path_target.string());
+                return "";
+            }
+            Log("Resolving local {} to {}", local_path.string(), host_path_target_sanitized.string());
+            return host_path_target_sanitized;
+        }
+
+        dir_ptr GetRoot(void) { return this->root; }
+        bool IsHostMounted(void) { return !this->host_root.empty(); }
+        const fs::path GetHostRoot(void) { return this->host_root; }
+        blkid_t GetBlkId(void) { return this->block_id; }
         inode_ptr GetInodeByFileno(fileno_t fileno);
 
         int Resolve(fs::path &path, Resolved &r);

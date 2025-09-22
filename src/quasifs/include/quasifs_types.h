@@ -93,8 +93,21 @@ namespace QuasiFS
         }
     };
 
-    enum class SeekOrigin : uint8_t
+    typedef struct Dirent Dirent;
+    using dirent_ptr = std::shared_ptr<Dirent>;
+
+    struct Dirent
     {
+        Dirent() = default;
+        ~Dirent() = default;
+        quasi_ino_t d_ino{};
+        quasi_off_t d_off{};
+        unsigned short d_reclen{};
+        unsigned char d_type{};
+        char d_name[256]{};
+    };
+
+    enum class SeekOrigin : uint8_t {
         ORIGIN,
         CURRENT,
         END

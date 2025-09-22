@@ -86,31 +86,36 @@ namespace QuasiFS
 
         // // catch what if target exists and is not a file!
         if (nullptr == r.node)
+        {
             // parent node must exist
-            return status;
+            _errno = -status;
+            return -1;
+        }
 
         partition_ptr part = r.mountpoint;
         dir_ptr parent_node = std::static_pointer_cast<Directory>(r.node);
 
         if (part->IsHostMounted())
         {
-            fs::path host_path_target = part->SanitizePath(part->GetHostRoot() / r.local_path);
+            fs::path host_path_target = part->GetHostPath(r.local_path);
             if (host_path_target.empty())
             {
-                LogError("Malicious path detected: {}", (part->GetHostRoot() / r.local_path).string());
-                return -QUASI_EPERM;
+                _errno = QUASI_EPERM;
+                return -1;
             }
-            Log("Resolving local {} to hosts {}", path.string(), (host_path_target / leaf).string());
+
             status = this->driver.Creat(host_path_target / leaf, mode);
 
             if (status != 0)
+            {
                 // hosts operation must succeed in order to continue
-                return status;
+                return -1;
+            }
         }
 
         // if host succeeded, we hope this will too o.o
         file_ptr new_file = RegularFile::Create();
-        return r.mountpoint->touch(parent_node, leaf, new_file);
+        status = r.mountpoint->touch(parent_node, leaf, new_file);
 
         return 0;
     };
@@ -143,7 +148,10 @@ namespace QuasiFS
 
         // cross-partition linking is not supported
         if (sos.mountpoint != tar.mountpoint)
-            return -QUASI_EXDEV;
+        {
+            _errno = QUASI_EXDEV;
+            return -1;
+        }
 
         inode_ptr sos_inode = sos.node;
         return tar.parent->link(tar.leaf, sos_inode);
@@ -257,7 +265,7 @@ namespace QuasiFS
     //     return -QUASI_EBADF;
     // }
 
-    int QFS::MKDir(const fs::path &path, int mode)
+    int QFS::MKDir(const fs::path &path, quasi_mode_t mode)
     {
         Resolved r{};
         fs::path dirtree = path.parent_path();
@@ -274,8 +282,12 @@ namespace QuasiFS
 
         if (part->IsHostMounted())
         {
-            fs::path host_path_target = part->GetHostRoot() / r.local_path;
-            Log("Resolving local {} to hosts {}", path.string(), host_path_target.string());
+            fs::path host_path_target = part->GetHostPath(r.local_path);
+            if (host_path_target.empty())
+            {
+                _errno = QUASI_EPERM;
+                return -1;
+            }
             status = this->driver.MKDir(host_path_target);
             if (status != 0)
                 // hosts operation must succeed in order to continue

@@ -13,22 +13,37 @@ using namespace QuasiFS;
 
 int main()
 {
-    QFS v;
 
-    partition_ptr host_partition = Partition::Create(fs::absolute("."));
+    // // Virtual test
+    // QFS v;
+    // Test(v);
 
-    Log("{}", host_partition->GetHostRoot().string());
+    // // Host-bound test
 
-    int status;
-    status = v.MKDir("/host");
-    status = v.Mount("/host", host_partition);
+    // prepare test
+    fs::path test_root_dir = fs::absolute("test_root");
+    fs::create_directory(test_root_dir);
 
-    status = v.MKDir("/host/hehe");
-    status = v.MKDir("/host/hehe/hihihi");
-    status = v.Creat("/host/hehe/qweqwe.txt");
-    status = v.Creat("/host/hehe/hihihi/zxczxc.txt");
+    QFS vh(test_root_dir);
+    vh.SyncHost();
 
-    //     Test(v);
+ printTree(vh.GetRoot(), "/", 0);
+
+    // int status;
+    // status = vh.MKDir("/host");
+
+    // status = vh.MKDir("/host/hehe");
+    // status = vh.MKDir("/host/hehe/hihihi");
+    // status = vh.Creat("/host/hehe/qweqwe.txt");
+    // status = vh.Creat("/host/hehe/hihihi/zxczxc.txt");
+    // status = vh.Creat("/host/hehe/hihihi/../../../..//zxczxc.txt");
+
+
+
+  //  Test(vh);
+
+    // end test
+   // fs::remove_all(test_root_dir);
 
     // QFS vv;
     // vv.MKDir("/dev");

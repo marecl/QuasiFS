@@ -1,5 +1,7 @@
 #include <cstdint>
 #include <cstdio>
+#include <dirent.h>
+
 #include <sys/unistd.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
@@ -13,7 +15,7 @@ namespace HostIODriver
     int HostIO_POSIX::Open(const fs::path &path, int flags, quasi_mode_t mode)
     {
         errno = this->_errno = 0;
-        int status = open(path.string().c_str(), ToOpenFlags(flags), ToOpenMode(mode));
+        int status = open(path.c_str(), ToOpenFlags(flags), ToOpenMode(mode));
         this->_errno = errno;
         return status;
     }
@@ -21,7 +23,7 @@ namespace HostIODriver
     int HostIO_POSIX::Creat(const fs::path &path, quasi_mode_t mode)
     {
         errno = this->_errno = 0;
-        int status = creat(path.string().c_str(), ToOpenMode(mode));
+        int status = creat(path.c_str(), ToOpenMode(mode));
         this->_errno = errno;
         return status;
     }
@@ -37,7 +39,7 @@ namespace HostIODriver
     int HostIO_POSIX::Unlink(const fs::path &path)
     {
         errno = this->_errno = 0;
-        int status = unlink(path.string().c_str());
+        int status = unlink(path.c_str());
         this->_errno = errno;
         return status;
     }
@@ -60,7 +62,7 @@ namespace HostIODriver
     int HostIO_POSIX::Truncate(const fs::path &path, quasi_size_t size)
     {
         errno = this->_errno = 0;
-        int status = truncate(path.string().c_str(), size);
+        int status = truncate(path.c_str(), size);
         this->_errno = errno;
         return status;
     }
@@ -125,7 +127,7 @@ namespace HostIODriver
     int HostIO_POSIX::MKDir(const fs::path &path, quasi_mode_t mode)
     {
         errno = this->_errno = 0;
-        int status = mkdir(path.string().c_str(), mode);
+        int status = mkdir(path.c_str(), mode);
         this->_errno = errno;
         return status;
     }
@@ -135,7 +137,7 @@ namespace HostIODriver
         struct stat st;
 
         errno = this->_errno = 0;
-        int status = stat(path.string().c_str(), &st);
+        int status = stat(path.c_str(), &st);
         _errno = errno;
 
         // handled by QFS

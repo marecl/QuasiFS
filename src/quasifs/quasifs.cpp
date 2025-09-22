@@ -9,14 +9,94 @@
 #include "include/quasifs.h"
 
 #include "../log.h"
+#include <iostream>
+
 namespace QuasiFS
 {
 
-    QFS::QFS()
+    QFS::QFS(const fs::path &host_path)
     {
-        this->rootfs = Partition::Create();
+        this->rootfs = Partition::Create(host_path);
         this->root = rootfs->GetRoot();
         this->block_devices[this->rootfs->GetBlkId()] = this->rootfs;
+    }
+
+    void QFS::SyncHostImpl(partition_ptr &part, const fs::path &dir, std::string prefix)
+    {
+        const fs::path host_path = part->GetHostPath();
+
+        // cut out host-root, remainder is Partition path
+        auto host_path_components = std::distance(host_path.begin(), host_path.end()) - 1;
+        auto slice_path = [host_path_components](const fs::path &p)
+        {
+            fs::path out;
+            auto it = p.begin();
+            std::advance(it, host_path_components);
+            for (; it != p.end(); ++it)
+                out /= *it;
+            return out;
+        };
+
+        try
+        {
+            for (auto entry = fs::recursive_directory_iterator(host_path); entry != fs::recursive_directory_iterator(); entry++)
+            {
+                // wcięcie zależne od głębokości
+                fs::path entry_path = entry->path();
+                fs::path pp = "/" / slice_path(entry->path());
+                fs::path parent_path = pp.parent_path();
+                fs::path leaf = pp.filename();
+
+                Resolved r{};
+                part->Resolve(parent_path, r);
+
+                if (nullptr == r.node)
+                {
+                    LogError("Cannot resolve quasi-target for sync: {}", parent_path.string());
+                    continue;
+                }
+
+                dir_ptr parent_dir = r.node->is_dir() ? std::static_pointer_cast<Directory>(r.node) : nullptr;
+                inode_ptr new_inode{};
+
+                if (entry->is_directory())
+                {
+                    new_inode = Directory::Create();
+                    part->mkdir(parent_dir, leaf, std::static_pointer_cast<Directory>(new_inode));
+                }
+                else if (entry->is_regular_file())
+                {
+                    new_inode = RegularFile::Create();
+                    part->touch(parent_dir, leaf, std::static_pointer_cast<RegularFile>(new_inode));
+                }
+                else
+                {
+                    LogError("Unsupported host file type: {}", entry_path.string());
+                    continue;
+                }
+
+                if (0 != this->driver.Stat(entry_path, &new_inode->st))
+                {
+                    LogError("Cannot stat file: {}", entry_path.string());
+                    continue;
+                }
+            }
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Błąd: " << e.what() << "\n";
+        }
+    }
+
+    int QFS::SyncHost(void)
+    {
+        for (auto &[blkid, part] : this->block_devices)
+        {
+            if (part->IsHostMounted())
+                SyncHostImpl(part, "/");
+        }
+
+        return 0;
     }
 
     int QFS::Resolve(fs::path path, Resolved &r)

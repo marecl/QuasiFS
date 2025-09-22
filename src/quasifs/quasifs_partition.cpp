@@ -22,6 +22,7 @@ namespace QuasiFS
         if (path.empty())
             return -QUASI_ENOENT;
 
+        r.mountpoint = shared_from_this();
         r.parent = this->root;
         r.node = this->root;
         r.leaf = "";

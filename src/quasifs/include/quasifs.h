@@ -31,13 +31,14 @@ namespace QuasiFS
         HostIO driver{};
 
     public:
-        QFS();
+        QFS(const fs::path &host_path = "");
         ~QFS() = default;
 
         //
         // QFS methods
         //
-
+        int SyncHost(void);
+        void SyncHostImpl(partition_ptr &part, const fs::path &dir, std::string prefix = "");
         // Return root directory
         dir_ptr GetRoot() { return this->root; }
         // Return root partition
@@ -56,7 +57,6 @@ namespace QuasiFS
         //
         int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755);
         int Creat(const fs::path &path, quasi_mode_t mode = 0755);
-
         int Close(const int fd);
         int LinkSymbolic(const fs::path &src, const fs::path &dst);
         int Link(const fs::path &src, const fs::path &dst);
