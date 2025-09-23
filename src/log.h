@@ -5,15 +5,15 @@
 #include <iostream>
 #include <format>
 
-#define LogCustom(fn, msg, fmt, ...)                                                                                        \
-    do                                                                                                                      \
-    {                                                                                                                       \
+#define LogCustom(fn, msg, fmt, ...)                                                                                     \
+    do                                                                                                                   \
+    {                                                                                                                    \
         std::cout << std::format("[{:^25s}] ", fn) << std::format("{}", msg) << std::format(fmt, ##__VA_ARGS__) << "\n"; \
     } while (0)
 
-#define Log(fmt, ...)                                    \
-    do                                                   \
-    {                                                    \
+#define Log(fmt, ...)                                            \
+    do                                                           \
+    {                                                            \
         LogCustom(__FUNCTION__, "[INFO]\t", fmt, ##__VA_ARGS__); \
     } while (0)
 

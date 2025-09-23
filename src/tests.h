@@ -282,12 +282,12 @@ void TestMount(QFS &qfs)
     auto parent_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
 
     Log("\tPost-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root_mount, parent_fileno_mount, self_fileno_mount);
-    if (self_fileno_mount != 2)
+    if (2 != self_fileno_mount)
     {
         LogError("Mountpoint root fileno isn't 2");
     }
 
-    if (parent_fileno_mount != 2)
+    if (2 != parent_fileno_mount)
     {
         LogError("Mountpoint root fileno isn't 2");
     }
@@ -446,7 +446,7 @@ void TestStLinkFile(QFS &qfs)
 
     auto nlink = &f->st.st_nlink;
 
-    if (*nlink == 1)
+    if (1 == *nlink)
         LogSuccess("Created new file. nlink=1", *nlink);
     else
         LogError("New file link {} != 1", *nlink);
@@ -456,7 +456,7 @@ void TestStLinkFile(QFS &qfs)
     else
         LogError("Link existing file failed");
 
-    if (*nlink == 2)
+    if (2 == *nlink)
         LogSuccess("nlink ==2");
     else
         LogError("New file link {} != 2", *nlink);
@@ -466,7 +466,7 @@ void TestStLinkFile(QFS &qfs)
     else
         LogError("Unlink OG file failed: {}", status);
 
-    if (*nlink == 1)
+    if (1 == *nlink)
         LogSuccess("nlink ==1");
     else
         LogError("New file link {} != 1", *nlink);
@@ -498,11 +498,11 @@ void TestStLinkDir(QFS &qfs)
     qfs.MKDir("/dir");
     qfs.Resolve("/dir", r);
 
-    file_ptr f = std::reinterpret_pointer_cast<RegularFile>(r.node);
+    dir_ptr f = std::reinterpret_pointer_cast<Directory>(r.node);
 
     auto nlink = &f->st.st_nlink;
 
-    if (*nlink == 2)
+    if (2 == *nlink)
         LogSuccess("Created new file. nlink=2", *nlink);
     else
         LogError("New dir link {} != 2", *nlink);
@@ -517,7 +517,7 @@ void TestStLinkDir(QFS &qfs)
     else
         LogError("Can't create subdir");
 
-    if (*nlink == 3)
+    if (3 == *nlink)
         LogSuccess("Dir with subdir nlink==3");
     else
         LogError("Dir with subdir nlink {} != 3", *nlink);
@@ -527,7 +527,7 @@ void TestStLinkDir(QFS &qfs)
     else
         LogError("Unlink subdir failed: {}", status);
 
-    if (*nlink == 2)
+    if (2 == *nlink)
         LogSuccess("Dir nlink decreased after removing subdir nlink==2");
     else
         LogError("Dir nlink didn't decrease after removing subdir nlink: {} != 2", *nlink);

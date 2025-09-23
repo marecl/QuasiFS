@@ -16,62 +16,87 @@ namespace QuasiFS
     {
         Resolved r{};
         int status = this->Resolve(path, r);
+
+        partition_ptr part = r.mountpoint;
+        dir_ptr parent_node = r.parent;
         inode_ptr target = r.node;
-        bool exists = (-QUASI_ENOENT != status) && target;
 
-        // check for RO!
-
-        if (exists && (flags & O_EXCL) && (flags & O_CREAT))
-            return -QUASI_EEXIST;
-
-        if (!exists)
-        {
-            if ((flags & O_CREAT) == 0)
-                return -QUASI_ENOENT;
-
-            this->Touch(path);
-            target = r.parent->lookup(r.leaf);
-            if (nullptr == target)
-                // touch failed in target directory, issue with resolve() most likely
-                return -QUASI_EFAULT;
-        }
-
-        if (flags & O_TRUNC)
-        {
-            if (target->is_file())
-                std::static_pointer_cast<RegularFile>(target)->truncate(0);
-            else if (target->is_dir())
-                return -QUASI_EISDIR;
-            else
-                return -QUASI_EINVAL;
-        }
-
-        // if exists and is a directory, can't be opened with any kind of write
-        if (exists && (target->is_dir() || (flags & O_DIRECTORY)) && (flags & (O_TRUNC | O_RDWR | O_WRONLY)))
-            return -QUASI_EISDIR;
-
-        if ((flags & O_DIRECTORY) && !target->is_dir())
-            // opening dirs isn't supported yet
-            return -QUASI_ENOTDIR;
-
-        if (flags & (O_APPEND | O_NOFOLLOW | O_PATH /* | O_TMPFILE */))
-        {
-            // O_TMPFILE expansion includes O_DIRECTORY
-            // not implemented
-            return -QUASI_EINVAL;
-        }
-
-        if (flags & (O_NONBLOCK | O_SYNC | O_ASYNC | O_CLOEXEC | O_DIRECT | O_DSYNC | O_LARGEFILE | O_NOATIME | O_NOCTTY))
-        {
-            // unused, not affecting file manip per-se
-        }
-
+        // prepare file descriptor
         auto next_free_handle = this->GetFreeHandleNo();
         fd_handle_ptr handle = File::Create();
 
         handle->node = target;
         handle->read = flags & O_WRONLY ? false : true;
         handle->write = flags & O_WRONLY ? true : (flags & O_RDWR);
+
+        if (part->IsHostMounted())
+        {
+            fs::path host_path_target{};
+            if (!part->GetHostPath(host_path_target, r.local_path))
+            {
+                _errno = QUASI_EACCES;
+                return -1;
+            }
+            int host_fd = this->hio_driver.Open(host_path_target.c_str(), flags, mode);
+            if (-1 == host_fd)
+                // hosts operation must succeed in order to continue
+                return -1;
+            handle->host_fd = host_fd;
+            // handle->
+        }
+        else
+        {
+            bool exists = (-QUASI_ENOENT != status) && target;
+
+            // check for RO!
+
+            if (exists && (flags & O_EXCL) && (flags & O_CREAT))
+                return -QUASI_EEXIST;
+
+            if (!exists)
+            {
+                if ((flags & O_CREAT) == 0)
+                    return -QUASI_ENOENT;
+
+                part->touch(parent_node, r.leaf);
+                target = parent_node->lookup(r.leaf);
+                if (nullptr == target)
+                    // touch failed in target directory, issue with resolve() most likely
+                    return -QUASI_EFAULT;
+            }
+
+            if (flags & O_TRUNC)
+            {
+                if (target->is_file())
+                    std::static_pointer_cast<RegularFile>(target)->truncate(0);
+                else if (target->is_dir())
+                    return -QUASI_EISDIR;
+                else
+                    return -QUASI_EINVAL;
+            }
+
+            // if exists and is a directory, can't be opened with any kind of write
+            if (exists && (target->is_dir() || (flags & O_DIRECTORY)) && (flags & (O_TRUNC | O_RDWR | O_WRONLY)))
+                return -QUASI_EISDIR;
+
+            if ((flags & O_DIRECTORY) && !target->is_dir())
+                // opening dirs isn't supported yet
+                return -QUASI_ENOTDIR;
+
+            if (flags & (O_APPEND | O_NOFOLLOW | O_PATH /* | O_TMPFILE */))
+            {
+                // O_TMPFILE expansion includes O_DIRECTORY
+                // not implemented
+                return -QUASI_EINVAL;
+            }
+
+            if (flags & (O_NONBLOCK | O_SYNC | O_ASYNC | O_CLOEXEC | O_DIRECT | O_DSYNC | O_LARGEFILE | O_NOATIME | O_NOCTTY))
+            {
+                // unused, not affecting file manip per-se
+            }
+        }
+
+        handle->node = target;
 
         this->open_fd[next_free_handle] = handle;
         return next_free_handle;
@@ -80,50 +105,55 @@ namespace QuasiFS
     int QFS::Creat(const fs::path &path, quasi_mode_t mode)
     {
         Resolved r{};
-        fs::path dirtree = path.parent_path();
-        fs::path leaf = path.filename();
-        int status = this->Resolve(dirtree, r);
+        int status = this->Resolve(path.parent_path(), r);
 
-        // // catch what if target exists and is not a file!
+        // TODO: catch what if target exists and is not a file!
+
         if (nullptr == r.node)
         {
-            // parent node must exist
+            // parent node must exist, file does not
             _errno = -status;
             return -1;
         }
 
-        partition_ptr part = r.mountpoint;
-        dir_ptr parent_node = std::static_pointer_cast<Directory>(r.node);
-
-        if (part->IsHostMounted())
+        if (r.mountpoint->IsHostMounted())
         {
-            fs::path host_path_target = part->GetHostPath(r.local_path);
-            if (host_path_target.empty())
+            fs::path host_path_target{};
+            if (!r.mountpoint->GetHostPath(host_path_target, r.local_path / path.filename()))
             {
-                _errno = QUASI_EPERM;
+                _errno = QUASI_EACCES;
                 return -1;
             }
 
-            status = this->driver.Creat(host_path_target / leaf, mode);
-
-            if (status != 0)
-            {
+            if (int status = this->hio_driver.Close(this->hio_driver.Creat(host_path_target, mode)); 0 != status)
                 // hosts operation must succeed in order to continue
-                return -1;
-            }
+                return status;
         }
 
-        // if host succeeded, we hope this will too o.o
-        file_ptr new_file = RegularFile::Create();
-        status = r.mountpoint->touch(parent_node, leaf, new_file);
+        this->vio_driver.set(r);
+        status = this->vio_driver.Creat(path, mode);
+        this->vio_driver.clear();
 
-        return 0;
+        return status;
     };
 
     int QFS::Close(int fd)
     {
         if (0 > fd || fd >= this->open_fd.size())
             return -QUASI_EBADF;
+
+        fd_handle_ptr handle = this->open_fd.at(fd);
+        if (nullptr == handle)
+        {
+            _errno = QUASI_EBADF;
+            return -1;
+        }
+
+        if (handle->host_fd >= 0)
+        {
+            if (0 != this->hio_driver.Close(handle->host_fd))
+                return -1;
+        }
 
         this->open_fd.at(fd) = nullptr;
         return 0;
@@ -173,13 +203,15 @@ namespace QuasiFS
     }
 
     int QFS::Flush(const int fd)
-    { // stub
-        return -QUASI_EINVAL;
+    { // not our job, delegate to host if applicable
+        // TODO: implement further
+        return this->hio_driver.Flush(fd);
     }
 
     int QFS::FSync(const int fd)
-    { // stub
-        return -QUASI_EINVAL;
+    { // not our job, delegate to host if applicable
+        // TODO: implement further
+        return this->hio_driver.FSync(fd);
     };
 
     int QFS::Truncate(const fs::path &path, quasi_size_t length)
@@ -268,8 +300,6 @@ namespace QuasiFS
     int QFS::MKDir(const fs::path &path, quasi_mode_t mode)
     {
         Resolved r{};
-        fs::path dirtree = path.parent_path();
-        fs::path leaf = path.filename();
         int status = this->Resolve(path, r);
 
         // catch what if target exists and is not a file!
@@ -277,35 +307,25 @@ namespace QuasiFS
             // parent node must exist
             return status;
 
-        partition_ptr part = r.mountpoint;
-        dir_ptr parent_node = r.parent;
-
-        if (part->IsHostMounted())
+        if (r.mountpoint->IsHostMounted())
         {
-            fs::path host_path_target = part->GetHostPath(r.local_path);
-            if (host_path_target.empty())
+            fs::path host_path_target{};
+            if (!r.mountpoint->GetHostPath(host_path_target, r.local_path))
             {
-                _errno = QUASI_EPERM;
+                _errno = QUASI_EACCES;
                 return -1;
             }
-            status = this->driver.MKDir(host_path_target);
-            if (status != 0)
+
+            if (int status = this->hio_driver.MKDir(host_path_target, mode); 0 != status)
                 // hosts operation must succeed in order to continue
                 return status;
         }
 
-        fs::path base = path.parent_path();
-        dir_ptr new_dir = Directory::Create();
+        this->vio_driver.set(r);
+        status = this->vio_driver.MKDir(path, mode);
+        this->vio_driver.clear();
 
-        status = this->MKDir(base, leaf, new_dir);
-
-        if (0 != status)
-            return status;
-
-        // if (!host_path_parent.empty())
-        //     this->host_files[new_dir] = host_path_parent / leaf;
-
-        return 0;
+        return status;
     }
 
     int QFS::RMDir(const fs::path &path)

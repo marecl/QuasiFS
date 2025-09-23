@@ -36,6 +36,8 @@ namespace QuasiFS
 
         fs::path SanitizePath(const fs::path &path)
         {
+            // lexically normal to resolve relative calls
+            // avoids going OOB with malicious file names
             fs::path tmp = path.lexically_normal();
             if (tmp.string().find(this->host_root, 0) == 0)
                 return tmp;
@@ -43,17 +45,20 @@ namespace QuasiFS
             return {};
         }
 
-        fs::path GetHostPath(const fs::path &local_path = "/")
+        // return - valid, out_path - sanitized path
+        bool GetHostPath(fs::path &output_path, const fs::path &local_path = "/")
         {
-            fs::path host_path_target = (this->GetHostRoot() / local_path.lexically_relative("/")).lexically_normal();
+            // must be relative to root, otherwise lvalue is overwritten
+            fs::path host_path_target = (this->GetHostRoot() / local_path.lexically_relative("/"));
             fs::path host_path_target_sanitized = SanitizePath(host_path_target);
             if (host_path_target_sanitized.empty())
             {
                 LogError("Malicious path detected: {}", host_path_target.string());
-                return "";
+                return false;
             }
+            output_path = host_path_target_sanitized;
             Log("Resolving local {} to {}", local_path.string(), host_path_target_sanitized.string());
-            return host_path_target_sanitized;
+            return true;
         }
 
         dir_ptr GetRoot(void) { return this->root; }

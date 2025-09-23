@@ -4,8 +4,7 @@
 #include <sys/fcntl.h>
 
 #include "../../hostio/include/host_io.h"
-#include "quasifs_inode.h"
-#include "quasifs_partition.h"
+#include "quasifs_types.h"
 
 /**
  * Wrapper class
@@ -28,7 +27,8 @@ namespace QuasiFS
         // open file descriptors
         std::vector<fd_handle_ptr> open_fd;
 
-        HostIO driver{};
+        HostIO hio_driver{};
+        HostVIO vio_driver{};
 
     public:
         QFS(const fs::path &host_path = "");

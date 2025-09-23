@@ -7,7 +7,7 @@ Miniature UNIX-like virtual filesystem.
 Main `QFS` class, handling partitions and interactions between them.
 
 ### Partitions
-Standalone containers.
+Standalone containers. Virtual and host-mapped, mix and match!
 
 ### Directories
 Storage for anything inheriting `Inode`.  
@@ -42,6 +42,16 @@ Experimental feature, proceed with caution.
 This makes QFS have obfuscated access to *virtually any* location on your machine.  
 There may (or may not) be safeguards against breaking out from specified path.  
 Use at your own risk.
+
+### Usage (preliminary)
+Target partition must be created with *absolute* host path in constructor.
+At the time it must be mounted somewhere in QFS to use `SyncHost()`.  
+This will populate inodes in QFS, and is expected to be run only **once**. Otherwise the behaviour is undefined.
+
+### Behaviour
+Partition root directory *must* exist on host filesystem.  
+If a partition is mounted in a directory bound to host, its contents are **invisible** from host's perspective.  
+Similarly to virtual mounts, preexisting directory contents are ignored on path resolution.
 
 ### Current safeguards
 `QUASI_EPERM` on accessing path on lower level than assigned to the partition.

@@ -2,14 +2,14 @@
 #include "quasi_errno.h"
 #include "include/quasifs_types.h"
 
+#include "include/quasifs.h"
+
 #include "include/quasifs_inode_directory.h"
 #include "include/quasifs_inode_regularfile.h"
 #include "include/quasifs_inode_symlink.h"
 #include "include/quasifs_partition.h"
-#include "include/quasifs.h"
 
 #include "../log.h"
-#include <iostream>
 
 namespace QuasiFS
 {
@@ -23,7 +23,12 @@ namespace QuasiFS
 
     void QFS::SyncHostImpl(partition_ptr &part, const fs::path &dir, std::string prefix)
     {
-        const fs::path host_path = part->GetHostPath();
+        fs::path host_path{};
+        if (!part->GetHostPath(host_path))
+        {
+            LogError("Cannot safely resolve host directory for blkdev {}", part->GetBlkId());
+            return; // false
+        }
 
         // cut out host-root, remainder is Partition path
         auto host_path_components = std::distance(host_path.begin(), host_path.end()) - 1;
@@ -75,7 +80,7 @@ namespace QuasiFS
                     continue;
                 }
 
-                if (0 != this->driver.Stat(entry_path, &new_inode->st))
+                if (0 != this->hio_driver.Stat(entry_path, &new_inode->st))
                 {
                     LogError("Cannot stat file: {}", entry_path.string());
                     continue;
@@ -86,6 +91,7 @@ namespace QuasiFS
         {
             std::cerr << "Błąd: " << e.what() << "\n";
         }
+        return; // true
     }
 
     int QFS::SyncHost(void)
@@ -288,7 +294,7 @@ namespace QuasiFS
         auto open_fd_size = open_fd.size();
         for (size_t idx = 0; idx < open_fd_size; idx++)
         {
-            if (this->open_fd[idx] == nullptr)
+            if (nullptr == this->open_fd[idx])
                 return idx;
         }
         open_fd.push_back(nullptr);

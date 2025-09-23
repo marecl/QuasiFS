@@ -6,11 +6,11 @@
 
 #include <cstdint>
 #include "host_io_virtual.h"
-    namespace HostIODriver
+namespace HostIODriver
+{
+    class HostIO_Win32
     {
-        class HostIO_Win32
-        {
-        };
-    }
+    };
+}
 
 #endif

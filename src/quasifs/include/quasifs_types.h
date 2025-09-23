@@ -3,7 +3,7 @@
 #include <chrono>
 #include <filesystem>
 #include <sys/types.h>
-#include <errno.h>
+
 namespace QuasiFS
 {
 
@@ -80,7 +80,6 @@ namespace QuasiFS
     {
         File() = default;
         ~File() = default;
-        fs::path path{};   // qfs path
         int host_fd{-1};   // fd if opened with HostIO
         inode_ptr node{};  // inode
         bool read{};       // read permission
@@ -90,6 +89,11 @@ namespace QuasiFS
         static fd_handle_ptr Create()
         {
             return std::shared_ptr<File>(new File());
+        }
+
+        bool IsOpen(void)
+        {
+            return nullptr == this->node;
         }
     };
 
@@ -107,7 +111,8 @@ namespace QuasiFS
         char d_name[256]{};
     };
 
-    enum class SeekOrigin : uint8_t {
+    enum class SeekOrigin : uint8_t
+    {
         ORIGIN,
         CURRENT,
         END
