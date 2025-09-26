@@ -21,6 +21,14 @@ int main()
   // // Host-bound test
 
   // prepare test
+  try
+  {
+    fs::remove_all(fs::absolute("test_root"));
+  }
+  catch (...)
+  {
+  }
+
   fs::path test_root_dir = fs::absolute("test_root");
   fs::create_directory(test_root_dir);
 
@@ -37,6 +45,7 @@ int main()
 
   int status;
   status = vh.MKDir("/host");
+  status = vh.Creat("/hostfile");
 
   status = vh.MKDir("/host/hehe");
   // status = vh.MKDir("/host/hehe/hihihi");
@@ -46,7 +55,7 @@ int main()
 
   printTree(vh.GetRoot(), "/", 0);
 
-  // Test(vh);
+  Test(vh);
 
   // end test
   // fs::remove_all(test_root_dir);
@@ -61,7 +70,7 @@ int main()
   // vv.Touch("/dev", "stdin", stdi);
   // vv.Touch("/dev", "stderr", stde);
   // Log("<<<< PRINTING FS TREE >>>>");
-  // printTree(vv.GetRoot(), "/", 0);
+  printTree(vh.GetRoot(), "/", 0);
 
   return 0;
 }

@@ -46,7 +46,7 @@ namespace QuasiFS
         }
 
         // return - valid, out_path - sanitized path
-        bool GetHostPath(fs::path &output_path, const fs::path &local_path = "/")
+        int GetHostPath(fs::path &output_path, const fs::path &local_path = "/")
         {
             // must be relative to root, otherwise lvalue is overwritten
             fs::path host_path_target = (this->GetHostRoot() / local_path.lexically_relative("/"));
@@ -54,11 +54,13 @@ namespace QuasiFS
             if (host_path_target_sanitized.empty())
             {
                 LogError("Malicious path detected: {}", host_path_target.string());
-                return false;
+                return -QUASI_EACCES;
             }
             output_path = host_path_target_sanitized;
             Log("Resolving local {} to {}", local_path.string(), host_path_target_sanitized.string());
-            return true;
+            // if (local_path.string().size() >= 256)
+            //     return -QUASI_ENAMETOOLONG;
+            return 0;
         }
 
         dir_ptr GetRoot(void) { return this->root; }
@@ -89,6 +91,7 @@ namespace QuasiFS
 
         static void mkrelative(dir_ptr parent, dir_ptr child);
 
+        int link(inode_ptr source, dir_ptr destination_parent, const std::string& name);
         int unlink(dir_ptr parent, const std::string &child);
     };
 

@@ -17,16 +17,9 @@ namespace HostIODriver
     {
 
     protected:
-        quasi_errno_t _errno{};
-
     public:
         HostIO_Base();
         ~HostIO_Base();
-
-        //
-        // Internal, OS-specific
-        //
-        virtual const quasi_errno_t geterrno() const { return _errno; }
 
         //
         // Native wrappers

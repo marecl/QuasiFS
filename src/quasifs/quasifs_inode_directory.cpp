@@ -22,13 +22,6 @@ namespace QuasiFS
 
     int Directory::link(const std::string &name, inode_ptr child)
     {
-        if (name.empty() || nullptr == child)
-            return -QUASI_ENOENT;
-
-        if (child->is_dir())
-            // CAN'T link a directory
-            return -QUASI_EPERM;
-
         if (entries.count(name))
             return -QUASI_EEXIST;
         entries[name] = child;

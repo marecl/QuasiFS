@@ -20,7 +20,10 @@ namespace QuasiFS
     int Partition::Resolve(fs::path &path, Resolved &r)
     {
         if (path.empty())
-            return -QUASI_ENOENT;
+            return -QUASI_EINVAL;
+
+        if (path.is_relative())
+            return -QUASI_EBADF;
 
         r.mountpoint = shared_from_this();
         r.parent = this->root;
@@ -142,6 +145,7 @@ namespace QuasiFS
         if (nullptr == node)
             return -QUASI_ENOENT;
 
+        // truly remove if there are no hardlinks
         if (node->st.st_nlink > 0)
             return 0;
 
@@ -160,7 +164,7 @@ namespace QuasiFS
     int Partition::touch(dir_ptr parent, const std::string &name, file_ptr child)
     {
         if (nullptr == parent)
-            return -1;
+            return -QUASI_EINVAL;
 
         auto ret = parent->link(name, child);
         if (ret == 0)
@@ -206,7 +210,7 @@ namespace QuasiFS
     int Partition::mkdir(dir_ptr parent, const std::string &name, dir_ptr child)
     {
         if (nullptr == parent)
-            return -1;
+            return -QUASI_ENOENT;
 
         int ret = parent->mkdir(name, child);
 
@@ -234,8 +238,27 @@ namespace QuasiFS
         child->mkdir("..", parent);
     }
 
+    int Partition::link(inode_ptr source, dir_ptr destination_parent, const std::string &name)
+    {
+        if (source == nullptr || destination_parent == nullptr)
+            return -QUASI_ENOENT;
+        if (name.empty())
+            return -QUASI_EINVAL;
+        if (destination_parent->lookup(name) != nullptr)
+            return -QUASI_EEXIST;
+        if (source->is_dir())
+            return -QUASI_EPERM;
+
+        return destination_parent->link(name, source);
+    }
+
     int Partition::unlink(dir_ptr parent, const std::string &child)
     {
+        if (parent == nullptr)
+            return -QUASI_ENOENT;
+        if (child.empty())
+            return -QUASI_EINVAL;
+
         inode_ptr target = parent->lookup(child);
         if (nullptr == target)
             return -QUASI_ENOENT;

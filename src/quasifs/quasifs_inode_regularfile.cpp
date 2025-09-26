@@ -48,4 +48,12 @@ namespace QuasiFS
         return count;
     }
 
+    int RegularFile::truncate(quasi_off_t length)
+    {
+        if (length < 0)
+            return -QUASI_EINVAL;
+        this->data.resize(length, 0);
+        this->st.st_size = length;
+        return length;
+    }
 }

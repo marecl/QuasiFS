@@ -36,8 +36,14 @@ Hard-links and symlinks to simplify access.
 Hardlinks are available only in scope of the local partition.  
 Symlinks are cross-partition, but handled only by `QFS`.  
 
+## Precautions
+This is a WIP project.  
+Use QFS for maximum compatibility with host FS, although results may vary.  
+Using Partitions (and lower) may or may not produce undefined behaviour.  
+
 ## Host integration
 It's now possible to bind host's directories to QFS Partition.  
+By design, QFS doesn't expect external changes. There is *no* desync detection or repair procedure. Your FS will just start breaking.
 Experimental feature, proceed with caution.
 This makes QFS have obfuscated access to *virtually any* location on your machine.  
 There may (or may not) be safeguards against breaking out from specified path.  
@@ -47,6 +53,10 @@ Use at your own risk.
 Target partition must be created with *absolute* host path in constructor.
 At the time it must be mounted somewhere in QFS to use `SyncHost()`.  
 This will populate inodes in QFS, and is expected to be run only **once**. Otherwise the behaviour is undefined.
+
+### Note
+Only QFS is made to work with host directories. Using Partition (and deeper) may produce unexpected results.  
+Proceed with caution when using host-bound files.  
 
 ### Behaviour
 Partition root directory *must* exist on host filesystem.  
@@ -61,9 +71,8 @@ App may try to open malicious locations like `../../.bashrc` to have access to u
 # TODO
 * Add more file types (block, char, etc.)  
 * File timestamps  
-* [WIP] Host-mounted files  
-    * Normalize paths (remove relative operators)
-    * Add top-level limit path (prohibit going beyond a certain path)
+* Don't remove inode if a file is open, but nlink reaches 0
+* Finish drivers
 * Permissions  
 * Flexible (and realistic) fileno and blockdev values
 * Dirents

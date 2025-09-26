@@ -5,11 +5,11 @@
 #include <iostream>
 #include <format>
 
-#define LogCustom(fn, msg, fmt, ...)                                                                                     \
-    do                                                                                                                   \
-    {                                                                                                                    \
-        std::cout << std::format("[{:^25s}] ", fn) << std::format("{}", msg) << std::format(fmt, ##__VA_ARGS__) << "\n"; \
-    } while (0)
+template <typename... Args>
+void LogCustom(const std::string_view fn, const std::string_view msg, std::format_string<Args...> fmt, Args &&...args)
+{
+    std::cout << std::format("[{:^25s}] ", fn) << std::format("{}", msg) << std::format(fmt, std::forward<Args>(args)...) << "\n";
+}
 
 #define Log(fmt, ...)                                            \
     do                                                           \

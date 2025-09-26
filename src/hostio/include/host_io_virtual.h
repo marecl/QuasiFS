@@ -29,11 +29,12 @@ namespace HostIODriver
         // Resolved holds necessary context to perform any FS operation
         // Set context immediately before target operation and clear immediately after
         // to avoid accidental mixups
+        // Path is more of a... suggestion where we might be.
         //
 
-        void set(Resolved &res)
+        void set(Resolved *res)
         {
-            this->res = &res;
+            this->res = res;
         }
 
         void clear(void)
@@ -45,12 +46,19 @@ namespace HostIODriver
         // Native wrappers
         //
 
-        // int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755) override;
-        // int Creat(const fs::path &path, quasi_mode_t mode = 0755) override;
+        /**
+         * WARNING
+         * This function doesn't return numeric fd
+         * The only outputs are 0 and -errno!
+         */
+        int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755) override;
+        int Creat(const fs::path &path, quasi_mode_t mode = 0755) override;
+
+        // unused, QFS handles everything
         // int Close(const int fd) override;
 
-        // int Link(const fs::path &src, const fs::path &dst) override;
-        // int Unlink(const fs::path &path) override;
+        int Link(const fs::path &src, const fs::path &dst) override;
+        int Unlink(const fs::path &path) override;
         // int Flush(const int fd) override;
         // int FSync(const int fd) override;
         // int Truncate(const fs::path &path, quasi_size_t size) override;
@@ -62,7 +70,7 @@ namespace HostIODriver
         // quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count) override;
         // quasi_ssize_t PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset) override;
         int MKDir(const fs::path &path, quasi_mode_t mode = 0755) override;
-        // int RMDir(const fs::path &path) override;
+        int RMDir(const fs::path &path) override;
 
         // int Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf) override;
         // int FStat(const int fd, QuasiFS::quasi_stat_t *statbuf) override;

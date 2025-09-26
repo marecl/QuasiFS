@@ -19,74 +19,67 @@
 namespace HostIODriver
 {
 
-    // int HostIO_POSIX::Open(const fs::path &path, int flags, quasi_mode_t mode)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = open(path.c_str(), ToPOSIXOpenFlags(flags), ToPOSIXOpenMode(mode));
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    int HostIO_POSIX::Open(const fs::path &path, int flags, quasi_mode_t mode)
+    {
+        errno = 0;
+        int status = open(path.c_str(), ToPOSIXOpenFlags(flags), ToPOSIXOpenMode(mode));
+        return status >= 0 ? status : -errno;
+    }
 
     int HostIO_POSIX::Creat(const fs::path &path, quasi_mode_t mode)
     {
-        errno = this->_errno = 0;
-        if (path.empty())
-        {
-            _errno = QUASI_EINVAL;
-            return -1;
-        }
-
+        errno = 0;
         int status = creat(path.c_str(), ToPOSIXOpenMode(mode));
-        this->_errno = errno;
-        return status;
+        return status >= 0 ? status : -errno;
     }
 
-    // int HostIO_POSIX::Close(const int fd)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = close(fd);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    int HostIO_POSIX::Close(const int fd)
+    {
+        errno = 0;
+        int status = close(fd);
+        return status == 0 ? status : -errno;
+    }
 
-    // int HostIO_POSIX::Unlink(const fs::path &path)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = unlink(path.c_str());
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    int HostIO_POSIX::Link(const fs::path &src, const fs::path &dst)
+    {
+        errno = 0;
+        int status = link(src.c_str(), dst.c_str());
+        return status == 0 ? status : -errno;
+    }
 
-    // int HostIO_POSIX::Flush(const int fd)
-    // {
-    //     // no equivalent in POSIX
-    //     _errno = 0;
-    //     return 0;
-    // }
+    int HostIO_POSIX::Unlink(const fs::path &path)
+    {
+        errno = 0;
+        int status = unlink(path.c_str());
+        return status == 0 ? status : -errno;
+    }
 
-    // int HostIO_POSIX::FSync(const int fd)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = fsync(fd);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    int HostIO_POSIX::Flush(const int fd)
+    {
+        errno = 0;
+        return 0;
+    }
 
-    // int HostIO_POSIX::Truncate(const fs::path &path, quasi_size_t size)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = truncate(path.c_str(), size);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    int HostIO_POSIX::FSync(const int fd)
+    {
+        errno = 0;
+        int status = fsync(fd);
+        return status == 0 ? status : -errno;
+    }
 
-    // int HostIO_POSIX::FTruncate(const int fd, quasi_size_t size)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = ftruncate(fd, size);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    int HostIO_POSIX::Truncate(const fs::path &path, quasi_size_t size)
+    {
+        errno = 0;
+        int status = truncate(path.c_str(), size);
+        return status == 0 ? status : -errno;
+    }
+
+    int HostIO_POSIX::FTruncate(const int fd, quasi_size_t size)
+    {
+        errno = 0;
+        int status = ftruncate(fd, size);
+        return status == 0 ? status : -errno;
+    }
 
     // quasi_off_t HostIO_POSIX::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
     // {
@@ -139,63 +132,67 @@ namespace HostIODriver
 
     int HostIO_POSIX::MKDir(const fs::path &path, quasi_mode_t mode)
     {
-        errno = this->_errno = 0;
-        if (path.empty())
-        {
-            _errno = QUASI_EINVAL;
-            return -1;
-        }
-
+        errno = 0;
         int status = mkdir(path.c_str(), mode);
-        this->_errno = errno;
-        return status;
+        return status == 0 ? status : -errno;
     }
 
-    // int HostIO_POSIX::Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf)
-    // {
-    //     struct stat st;
+    int HostIO_POSIX::RMDir(const fs::path &path)
+    {
+        errno = 0;
+        int status = rmdir(path.c_str());
+        return status == 0 ? status : -errno;
+    }
 
-    //     errno = this->_errno = 0;
-    //     int status = stat(path.c_str(), &st);
-    //     _errno = errno;
+    int HostIO_POSIX::Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf)
+    {
+        errno = 0;
 
-    //     // handled by QFS
-    //     // statbuf->st_dev = st.st_dev;
-    //     // statbuf->st_ino = st.st_ino;
-    //     // statbuf->st_nlink = st.st_nlink;
+        struct stat st;
 
-    //     statbuf->st_mode = st.st_mode;
-    //     statbuf->st_size = st.st_size;
-    //     statbuf->st_blksize = st.st_blksize;
-    //     statbuf->st_blocks = st.st_blocks;
-    //     statbuf->st_atim = st.st_atim;
-    //     statbuf->st_mtim = st.st_mtim;
-    //     statbuf->st_ctim = st.st_ctim;
+        int stat_status;
+        if (stat_status = stat(path.c_str(), &st); stat_status != 0)
+            return stat_status;
 
-    //     return status;
-    // }
+        // handled by QFS
+        // statbuf->st_dev = st.st_dev;
+        // statbuf->st_ino = st.st_ino;
+        // statbuf->st_nlink = st.st_nlink;
 
-    // int HostIO_POSIX::FStat(const int fd, QuasiFS::quasi_stat_t *statbuf)
-    // {
-    //     struct stat st;
+        statbuf->st_mode = st.st_mode;
+        statbuf->st_size = st.st_size;
+        statbuf->st_blksize = st.st_blksize;
+        statbuf->st_blocks = st.st_blocks;
+        statbuf->st_atim = st.st_atim;
+        statbuf->st_mtim = st.st_mtim;
+        statbuf->st_ctim = st.st_ctim;
 
-    //     errno = this->_errno = 0;
-    //     int status = fstat(fd, &st);
-    //     _errno = errno;
+        return 0;
+    }
 
-    //     // handled by QFS
-    //     // statbuf->st_dev = st.st_dev;
-    //     // statbuf->st_ino = st.st_ino;
-    //     // statbuf->st_nlink = st.st_nlink;
+    int HostIO_POSIX::FStat(const int fd, QuasiFS::quasi_stat_t *statbuf)
+    {
+        errno = 0;
 
-    //     statbuf->st_mode = st.st_mode;
-    //     statbuf->st_size = st.st_size;
-    //     statbuf->st_blksize = st.st_blksize;
-    //     statbuf->st_blocks = st.st_blocks;
-    //     statbuf->st_atim = st.st_atim;
-    //     statbuf->st_mtim = st.st_mtim;
-    //     statbuf->st_ctim = st.st_ctim;
+        struct stat st;
 
-    //     return status;
-    // }
+        int fstat_status;
+        if (fstat_status = fstat(fd, &st); fstat_status != 0)
+            return fstat_status;
+
+        // handled by QFS
+        // statbuf->st_dev = st.st_dev;
+        // statbuf->st_ino = st.st_ino;
+        // statbuf->st_nlink = st.st_nlink;
+
+        statbuf->st_mode = st.st_mode;
+        statbuf->st_size = st.st_size;
+        statbuf->st_blksize = st.st_blksize;
+        statbuf->st_blocks = st.st_blocks;
+        statbuf->st_atim = st.st_atim;
+        statbuf->st_mtim = st.st_mtim;
+        statbuf->st_ctim = st.st_ctim;
+
+        return 0;
+    }
 }

@@ -80,11 +80,11 @@ namespace QuasiFS
     {
         File() = default;
         ~File() = default;
-        int host_fd{-1};   // fd if opened with HostIO
-        inode_ptr node{};  // inode
-        bool read{};       // read permission
-        bool write{};      // write permission
-        quasi_off_t pos{}; // cursor offset
+        int host_fd{-1};         // fd if opened with HostIO
+        inode_ptr node{nullptr}; // inode
+        bool read{false};        // read permission
+        bool write{false};       // write permission
+        quasi_off_t pos{0};      // cursor offset
 
         static fd_handle_ptr Create()
         {
@@ -93,7 +93,7 @@ namespace QuasiFS
 
         bool IsOpen(void)
         {
-            return nullptr == this->node;
+            return nullptr != this->node;
         }
     };
 

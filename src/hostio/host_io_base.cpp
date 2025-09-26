@@ -16,11 +16,7 @@ namespace HostIODriver
     HostIO_Base::~HostIO_Base() = default;
 
     int HostIO_Base::Open(const fs::path &path, int flags, quasi_mode_t mode) { STUB(); }
-    int HostIO_Base::Creat(const fs::path &path, quasi_mode_t mode)
-    {
-        LogError("Stub called in HostIO_Base");
-        return -1;
-    }
+    int HostIO_Base::Creat(const fs::path &path, quasi_mode_t mode) { STUB(); }
     int HostIO_Base::Close(const int fd) { STUB(); }
     int HostIO_Base::Link(const fs::path &src, const fs::path &dst) { STUB(); }
     int HostIO_Base::Unlink(const fs::path &path) { STUB(); }

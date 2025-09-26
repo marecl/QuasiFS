@@ -24,7 +24,7 @@ namespace QuasiFS
     void QFS::SyncHostImpl(partition_ptr &part, const fs::path &dir, std::string prefix)
     {
         fs::path host_path{};
-        if (!part->GetHostPath(host_path))
+        if (0 != part->GetHostPath(host_path))
         {
             LogError("Cannot safely resolve host directory for blkdev {}", part->GetBlkId());
             return; // false
@@ -107,6 +107,11 @@ namespace QuasiFS
 
     int QFS::Resolve(fs::path path, Resolved &r)
     {
+        if (path.empty())
+            return -QUASI_EINVAL;
+        if (path.is_relative())
+            return -QUASI_EBADF;
+
         // on return:
         // node - last element of the path (if exists)
         // parent - parent element of the path (if parent dir is 1 level above last element)
@@ -120,6 +125,8 @@ namespace QuasiFS
 
         r.mountpoint = this->rootfs;
         r.local_path = path;
+        r.parent = this->root;
+        r.node = this->root;
 
         do
         {
@@ -237,56 +244,6 @@ namespace QuasiFS
         this->block_devices.erase(res.mountpoint->GetBlkId());
 
         return 0;
-    }
-
-    // create file at path (creates entry in parent dir). returns 0 or negative errno
-    int QFS::Touch(const fs::path &path)
-    {
-        fs::path base = path.parent_path();
-        std::string fname = path.filename();
-
-        return Touch(base, fname);
-    }
-
-    int QFS::Touch(const fs::path &path, const std::string &name)
-    {
-        return Touch(path, name, RegularFile::Create());
-    }
-
-    int QFS::Touch(const fs::path &path, const std::string &name, file_ptr child)
-    {
-        Resolved res{};
-        int ret = Resolve(path, res);
-
-        if (0 != ret)
-            return ret;
-
-        partition_ptr fsblk = res.mountpoint;
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
-
-        return fsblk->touch(dir, name, child);
-    }
-
-    int QFS::MKDir(const fs::path &path, const std::string &name)
-    {
-        return MKDir(path, name, Directory::Create());
-    }
-
-    int QFS::MKDir(const fs::path &path, const std::string &name, dir_ptr child)
-    {
-        Resolved res{};
-        int status = Resolve(path, res);
-
-        if (0 != status)
-            return status;
-
-        if (!res.node->is_dir())
-            return -QUASI_ENOTDIR;
-
-        partition_ptr fsblk = res.mountpoint;
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
-
-        return fsblk->mkdir(dir, name, child);
     }
 
     int QFS::GetFreeHandleNo()
