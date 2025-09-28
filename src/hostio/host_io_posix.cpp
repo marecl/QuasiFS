@@ -40,6 +40,13 @@ namespace HostIODriver
         return status == 0 ? status : -errno;
     }
 
+    int HostIO_POSIX::LinkSymbolic(const fs::path &src, const fs::path &dst)
+    {
+        errno = 0;
+        int status = symlink(src.c_str(), dst.c_str());
+        return status == 0 ? status : -errno;
+    }
+
     int HostIO_POSIX::Link(const fs::path &src, const fs::path &dst)
     {
         errno = 0;

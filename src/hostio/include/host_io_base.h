@@ -29,6 +29,7 @@ namespace HostIODriver
         virtual int Creat(const fs::path &path, quasi_mode_t mode = 0755);
         virtual int Close(const int fd);
 
+        virtual int LinkSymbolic(const fs::path &src, const fs::path &dst);
         virtual int Link(const fs::path &src, const fs::path &dst);
         virtual int Unlink(const fs::path &path);
         virtual int Flush(const int fd);

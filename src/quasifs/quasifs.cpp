@@ -137,19 +137,18 @@ namespace QuasiFS
 
             if (r.node->is_link())
             {
-                // symlink holds absolute path, so we need to start over.
-                // it may be a file or a directory, but if it's in the middle - it has to be a directory.
-                // when it's a part of the path, `Resolve` returns null parent (it's unused anyways), and leaf is
-                // remaining (uniterated) path.
-
-                // for example, there are 2 paths:
-                // /dirA/dirB/dirC/file.txt
-                // /dirD/sym [sym to dirB]
-                // we open /dirD/sym/dirC/tile.txt, so base path is substituted with /dirA/dirB + /dirC/file.txt
-                // incorrect symlink will just throw -QUASI_ENOTDIR
-
-                path = std::static_pointer_cast<Symlink>(r.node)->follow() / path;
-
+                // symlinks consume path from the front, since they point to an absolute location
+                // let's say /link is linked to /dirA/dirB, and we need to resolve /link/dirC
+                // path resolution will enter /link, and extract it as /dirA/dirB.
+                // from that same path, /dirC will be preserved and appened to symlink's target,
+                // which will yield /dirA/dirB/dirC
+                fs::path leftover = path;
+                // main path is overwritten with absolute path from symlink
+                path = std::static_pointer_cast<Symlink>(r.node)->follow();
+                // and if it's really in the way - restore leftover items
+                if (!leftover.empty())
+                    path /= leftover;
+                // reset everything to point to rootfs, where absolute path can be resolved again
                 r.mountpoint = this->rootfs;
                 r.parent = this->root;
                 r.node = this->root;
@@ -164,11 +163,12 @@ namespace QuasiFS
 
                 if (nullptr != mntroot)
                 {
-                    // nothing mounted
 
-                    // cross-partition resolution returns last-local directory, that holds the
-                    // mounted fs root directory. target fs is determined by mounted dir st.blk (ie. physical device).
-                    // here .leaf holds remainder of the path, that can be used as a starting point to iterate in new partition.
+                    // just like symlinks, only trailing path is saved
+                    // directory, in which partition is mounted, belongs to upstream filesystem,
+                    // so everything before (including) that directory is consumed
+
+                    // target partition is resolved with st.st_dev, which is unique for every mounted fs
 
                     auto mounted_blkdev = mntroot->getattr().st_dev;
 

@@ -1,5 +1,10 @@
 #pragma once
 
+#include "quasifs/include/quasifs_inode_directory.h"
+#include "quasifs/include/quasifs_inode_regularfile.h"
+#include "quasifs/include/quasifs_inode_symlink.h"
+#include "quasifs/include/quasifs_partition.h"
+
 #include "quasifs/include/quasifs.h"
 #include "log.h"
 #include <sys/fcntl.h>
@@ -28,7 +33,12 @@ void _printTree(const inode_ptr &node, const std::string &name, int depth)
         type = "CHR";
 
     if (!name.empty())
-        std::cout << std::format("[{:3s}]\t", type) << std::format("[{:3d}]\t", node->fileno) << std::format("[{:3d}]\t", node->st.st_nlink) << depEnt << name << std::endl;
+    {
+        std::cout << std::format("[{:3s}]\t", type) << std::format("[{:3d}]\t", node->fileno) << std::format("[{:3d}]\t", node->st.st_nlink) << depEnt << name;
+        if (node->is_link())
+            std::cout << "\t->\t" << std::static_pointer_cast<Symlink>(node)->follow();
+        std::cout << std::endl;
+    }
     else
         depth--;
 
@@ -61,13 +71,8 @@ void printTree(const inode_ptr &node, const std::string &name, int depth = 0)
     _printTree(node, name, depth);
 }
 
-#define UNIMPLEMENTED()                                       \
-    {                                                         \
-        LogTest("Unimplemented ({}:{})", __FILE__, __LINE__); \
-    }
-
 // Path resolution
-void TestResolve(QFS &qfs) UNIMPLEMENTED();
+void TestResolve(QFS &qfs);
 
 // Inode manip
 void TestTouchUnlinkFile(QFS &qfs);
@@ -80,19 +85,20 @@ void TestMountFileRetention(QFS &qfs);
 // Links
 void TestStLinkFile(QFS &qfs);
 void TestStLinkDir(QFS &qfs);
-void TestStLinkMixed(QFS &qfs) UNIMPLEMENTED();
+void TestStLinkMixed(QFS &qfs);
 
 // Symlinks
-void TestSymlinkFile(QFS &qfs) UNIMPLEMENTED();
-void TestSymlinkDir(QFS &qfs) UNIMPLEMENTED();
+void TestSymlinkFile(QFS &qfs);
+void TestSymlinkDir(QFS &qfs);
+void TestSymlinkCursed(QFS &qfs);
 
 // Files (I/O)
 void TestFileOpen(QFS &qfs);
-void TestFileops(QFS &qfs) UNIMPLEMENTED();
+void TestFileOps(QFS &qfs);
 
 // Directories (I/O)
 void TestDirOpen(QFS &qfs);
-void TestDirops(QFS &qfs) UNIMPLEMENTED();
+void TestDirOps(QFS &qfs);
 
 void Test(QFS &qfs)
 {
@@ -119,19 +125,30 @@ void Test(QFS &qfs)
     // Symlinks
     TestSymlinkFile(qfs);
     TestSymlinkDir(qfs);
+    TestSymlinkCursed(qfs);
 
     // Files (I/O)
     TestFileOpen(qfs);
-    TestFileops(qfs);
+    TestFileOps(qfs);
 
     // Directories (I/O)
     TestDirOpen(qfs);
-    TestDirops(qfs);
+    TestDirOps(qfs);
 
     Log("");
     Log("Tests complete");
     Log("");
 }
+
+//
+// Path resolution
+//
+
+void TestResolve(QFS &qfs) { UNIMPLEMENTED() }
+
+//
+// Inode manip
+//
 
 void TestTouchUnlinkFile(QFS &qfs)
 {
@@ -215,6 +232,10 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("dir not removed: {}", status);
 }
+
+//
+// Mounts (partitions)
+//
 
 void TestMount(QFS &qfs)
 {
@@ -433,6 +454,10 @@ void TestMountFileRetention(QFS &qfs)
         LogError("Mountpoint directory persisted");
 }
 
+//
+// Links
+//
+
 void TestStLinkFile(QFS &qfs)
 {
     LogTest("File link counter");
@@ -550,6 +575,224 @@ void TestStLinkDir(QFS &qfs)
         LogError("Dir not removed from inode table after removing all links");
 };
 
+void TestStLinkMixed(QFS &qfs) { UNIMPLEMENTED() }
+
+//
+// Symlinks
+//
+
+void TestSymlinkFile(QFS &qfs)
+{
+    LogTest("Symlinking files");
+
+    qfs.Close(qfs.Creat("/link_source_file"));
+    qfs.MKDir("/oneup");
+    qfs.Close(qfs.Creat("/oneup/link_source_file_up"));
+
+    Resolved r;
+
+    int resolve_status = qfs.Resolve("/link_source_file", r);
+    const file_ptr src_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/oneup/link_source_file_up", r);
+    const file_ptr src_file_up = std::static_pointer_cast<RegularFile>(r.node);
+    file_ptr dst_file;
+
+    // link, same directory
+    qfs.LinkSymbolic("/link_source_file", "/link_dest_file");
+    resolve_status = qfs.Resolve("/link_dest_file", r);
+    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    if (src_file == dst_file)
+        LogSuccess("Same directory symlink works");
+    else
+        LogError("Same directory symlink failed: Resolve returned {}", resolve_status);
+
+    // link, same directory, 1 level deep
+    qfs.LinkSymbolic("/oneup/link_source_file_up", "/oneup/link_dest_file_up");
+    resolve_status = qfs.Resolve("/oneup/link_dest_file_up", r);
+    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    if (src_file_up == dst_file)
+        LogSuccess("Same directory, 1 level deep symlink works");
+    else
+        LogError("Same directory 1 level deep symlink failed: Resolve returned {}", resolve_status);
+
+    // link, same directory, 1 level deep
+    qfs.LinkSymbolic("/oneup/link_source_file_up", "/link_dest_file_to_down");
+    resolve_status = qfs.Resolve("/link_dest_file_to_down", r);
+    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    if (src_file_up == dst_file)
+        LogSuccess("Same directory, up->down works");
+    else
+        LogError("Same directory up->down failed: Resolve returned {}", resolve_status);
+
+    // link, same directory, 1 level deep
+    qfs.LinkSymbolic("/link_source_file", "/oneup/link_dest_file_to_up");
+    resolve_status = qfs.Resolve("/oneup/link_dest_file_to_up", r);
+    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    if (src_file == dst_file)
+        LogSuccess("Same directory, down->up works");
+    else
+        LogError("Same directory down->up failed: Resolve returned {}", resolve_status);
+
+    return;
+}
+
+void TestSymlinkDir(QFS &qfs)
+{
+    LogTest("Symlinking directories");
+
+    qfs.MKDir("/link_source_dir");
+    qfs.MKDir("/oneup");
+    qfs.MKDir("/oneup/link_source_dir_up");
+
+    Resolved r;
+
+    int resolve_status = qfs.Resolve("/link_source_dir", r);
+    const dir_ptr src_dir = std::static_pointer_cast<Directory>(r.node);
+    resolve_status = qfs.Resolve("/oneup/link_source_dir_up", r);
+    const dir_ptr src_dir_up = std::static_pointer_cast<Directory>(r.node);
+    dir_ptr dst_dir;
+
+    // link, same directory
+    qfs.LinkSymbolic("/link_source_dir", "/link_dest_dir");
+    resolve_status = qfs.Resolve("/link_dest_dir", r);
+    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    if (src_dir == dst_dir)
+        LogSuccess("Same directory symlink works");
+    else
+        LogError("Same directory symlink failed: Resolve returned {}", resolve_status);
+
+    // link, same directory, 1 level deep
+    qfs.LinkSymbolic("/oneup/link_source_dir_up", "/oneup/link_dest_dir_up");
+    resolve_status = qfs.Resolve("/oneup/link_dest_dir_up", r);
+    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    if (src_dir_up == dst_dir)
+        LogSuccess("Same directory, 1 level deep symlink works");
+    else
+        LogError("Same directory 1 level deep symlink failed: Resolve returned {}", resolve_status);
+
+    // link, same directory, 1 level deep
+    qfs.LinkSymbolic("/oneup/link_source_dir_up", "/link_dest_dir_to_down");
+    resolve_status = qfs.Resolve("/link_dest_dir_to_down", r);
+    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    if (src_dir_up == dst_dir)
+        LogSuccess("Same directory, up->down works");
+    else
+        LogError("Same directory up->down failed: Resolve returned {}", resolve_status);
+
+    // link, same directory, 1 level deep
+    qfs.LinkSymbolic("/link_source_dir", "/oneup/link_dest_dir_to_up");
+    resolve_status = qfs.Resolve("/oneup/link_dest_dir_to_up", r);
+    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    if (src_dir == dst_dir)
+        LogSuccess("Same directory, down->up works");
+    else
+        LogError("Same directory down->up failed: Resolve returned {}", resolve_status);
+
+    return;
+}
+
+void TestSymlinkCursed(QFS &qfs)
+{
+    LogTest("Cursed links");
+
+    qfs.Creat("/src_file");
+    qfs.MKDir("/layer1");
+    qfs.MKDir("/layer1/layer2");
+    qfs.MKDir("/layer1/layer2/layer3");
+    qfs.MKDir("/layer1/layer2/layer3/layer4");
+
+    Resolved r;
+    int resolve_status = qfs.Resolve("/src_file", r);
+    const file_ptr src_file = std::static_pointer_cast<RegularFile>(r.node);
+    if (src_file == nullptr)
+        LogError("Didn't create test file");
+    file_ptr dst_file;
+
+    // linking directories
+    qfs.LinkSymbolic("/layer1/layer2/layer3/layer4", "/l4");
+    qfs.LinkSymbolic("/src_file", "/l4/sos");
+    resolve_status = qfs.Resolve("/l4/sos", r);
+    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+
+    if (src_file == dst_file)
+        LogSuccess("File symlinked to symlinked directory tree");
+    else
+        LogError("File symlinked to symlinked directory tree: Resolve returned {}", resolve_status);
+
+    // linking directories
+    qfs.LinkSymbolic("/l4/sos", "/l4/sos2");
+    resolve_status = qfs.Resolve("/l4/sos2", r);
+    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+
+    if (src_file == dst_file)
+        LogSuccess("File symlinked to file symlinked in symlinked directory tree");
+    else
+        LogError("File symlinked to file symlinked in symlinked directory tree: Resolve returned {}", resolve_status);
+
+    qfs.LinkSymbolic("/layer1/layer2/layer3/layer4", "/layer1/layer2/early4");
+    qfs.LinkSymbolic("/src_file", "/layer1/layer2/early4/early_file");
+    resolve_status = qfs.Resolve("/layer1/layer2/early4/early_file", r);
+    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+
+    if (src_file == dst_file)
+        LogSuccess("File symlinked to file symlinked in a directory symlinked within directory tree");
+    else
+        LogError("File symlinked to file symlinked in a directory symlinked within directory tree: Resolve returned {}", resolve_status);
+
+    // loops
+    qfs.MKDir("/tmp");
+    qfs.LinkSymbolic("/tmp/loopLinkDir", "/tmp/loopLinkDir");
+    resolve_status = qfs.Resolve("/tmp/loopLinkDir", r);
+    if (-QUASI_ELOOP == resolve_status)
+        LogSuccess("Symlink loop safeguard works for directories");
+    else
+        LogError("Symlink loop safeguard for directories didn't trigger: Resolve returned {}", resolve_status);
+
+    qfs.LinkSymbolic("/tmp/loopLinkFile", "/tmp/loopLinkFile");
+    resolve_status = qfs.Resolve("/tmp/loopLinkFile", r);
+    if (-QUASI_ELOOP == resolve_status)
+        LogSuccess("Symlink loop safeguard works for files");
+    else
+        LogError("Symlink loop safeguard for files didn't trigger: Resolve returned {}", resolve_status);
+
+    qfs.Creat("/missing_file");
+    qfs.LinkSymbolic("/missing_file", "/dangling_file");
+    qfs.Unlink("/missing_file");
+    resolve_status = qfs.Resolve("/dangling_file", r);
+
+    if (-QUASI_ENOENT == resolve_status)
+        LogSuccess("Dangling symlink returns ENOENT");
+    else
+        LogError("Resolving dangling symlink returns wrong error: ", resolve_status);
+
+    qfs.MKDir("/dir1");
+    qfs.MKDir("/dir2");
+    qfs.Creat("/dir2/XD");
+    qfs.LinkSymbolic("/dir2", "/dir1/missing");
+
+    resolve_status = qfs.Resolve("/dir1/missing/XD", r);
+    if (0 == resolve_status)
+        LogSuccess("Resolved file in directory symlinked inside a tree");
+    else
+        LogError("Didn't resolve file in directory symlinked inside a tree: ", resolve_status);
+
+    if (0 != qfs.Unlink("/dir1/missing"))
+    {
+        LogError("Unlink should remove symlink when path is not preceeded with /");
+    }
+
+    resolve_status = qfs.Resolve("/dir1/missing/XD", r);
+
+    if (-QUASI_ENOENT == resolve_status)
+        LogSuccess("Dangling symlink inside a tree returns ENOENT");
+    else
+        LogError("Resolving dangling symlink inside a tree returns wrong error: ", resolve_status);
+}
+
+//
+// Files (I/O)
+//
+
 void TestFileOpen(QFS &qfs)
 {
     LogTest("File open/close");
@@ -595,6 +838,12 @@ void TestFileOpen(QFS &qfs)
     else
         LogError("O_RDONLY | O_TRUNC, existing file: {}", status);
 }
+
+void TestFileOps(QFS &qfs) { UNIMPLEMENTED(); }
+
+//
+// Directories (I/O)
+//
 
 void TestDirOpen(QFS &qfs)
 {
@@ -651,3 +900,5 @@ void TestDirOpen(QFS &qfs)
     else
         LogError("not a dir, O_DIRECTORY: {}", status);
 }
+
+void TestDirOps(QFS &qfs) { UNIMPLEMENTED(); }

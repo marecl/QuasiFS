@@ -62,6 +62,7 @@ namespace HostIODriver
         int Creat(const fs::path &path, quasi_mode_t mode = 0755) override;
         int Close(const int fd) override;
 
+        int LinkSymbolic(const fs::path &src, const fs::path &dst)override;
         int Link(const fs::path &src, const fs::path &dst) override;
         int Unlink(const fs::path &path) override;
         int Flush(const int fd) override;

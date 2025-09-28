@@ -57,6 +57,7 @@ namespace HostIODriver
         // unused, QFS handles everything
         // int Close(const int fd) override;
 
+        int LinkSymbolic(const fs::path &src, const fs::path &dst)override;
         int Link(const fs::path &src, const fs::path &dst) override;
         int Unlink(const fs::path &path) override;
         // int Flush(const int fd) override;

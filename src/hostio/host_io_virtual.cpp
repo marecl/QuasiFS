@@ -24,6 +24,8 @@ namespace HostIODriver
         if (nullptr == this->res)
             return -QUASI_EINVAL;
 
+
+
         inode_ptr target = this->res->node;
         dir_ptr parent = this->res->parent;
         partition_ptr part = this->res->mountpoint;
@@ -31,6 +33,7 @@ namespace HostIODriver
         bool exists = this->res->node != nullptr;
 
         // check for RO!
+        std::string qweqwe =this->res->local_path;
 
         if (exists && (flags & O_EXCL) && (flags & O_CREAT))
             return -QUASI_EEXIST;
@@ -101,6 +104,19 @@ namespace HostIODriver
     // {
     //     return 0;
     // }
+
+    int HostIO_Virtual::LinkSymbolic(const fs::path &src, const fs::path &dst)
+    {
+        if (nullptr == this->res)
+            return -QUASI_EINVAL;
+
+        symlink_ptr sym = Symlink::Create(src);
+        // symlink counter is never increased
+        sym->st.st_nlink = 1;
+
+        this->res->mountpoint->IndexInode(sym);
+        return this->res->parent->link(dst.filename(), sym);
+    }
 
     int HostIO_Virtual::Link(const fs::path &src, const fs::path &dst)
     {

@@ -34,3 +34,8 @@ void LogCustom(const std::string_view fn, const std::string_view msg, std::forma
     {                                                                            \
         LogCustom(__FUNCTION__, "\033[32;1m[SUCC]\033[0m ", fmt, ##__VA_ARGS__); \
     } while (0)
+
+#define UNIMPLEMENTED()                                       \
+    {                                                         \
+        LogTest("Unimplemented ({}:{})", __FILE__, __LINE__); \
+    }

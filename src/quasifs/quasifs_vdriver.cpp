@@ -16,22 +16,22 @@ namespace QuasiFS
     {
         Resolved r{};
         // resolve for parent dir to avoid treating ENOENT as missing just the end file
-        int resolve_status = this->Resolve(path.parent_path(), r);
+        int resolve_status = this->Resolve(path, r);
 
-        if (0 != resolve_status)
+        // enoent on last element in the path is good
+        if (-QUASI_ENOENT == resolve_status)
+        {
+            if (nullptr == r.parent)
+                return -QUASI_ENOENT;
+        }
+        else if (0 != resolve_status)
             return resolve_status;
 
-        if (!r.node->is_dir())
-            // dunno
-            return -QUASI_EINVAL;
-
         partition_ptr part = r.mountpoint;
-        dir_ptr parent_node = std::static_pointer_cast<Directory>(r.node);
+        dir_ptr parent_node = std::static_pointer_cast<Directory>(r.parent);
 
         // update context fot vdriver
-        r.parent = parent_node;
-        r.node = parent_node->lookup(path.filename());
-        r.leaf = path.filename();
+        //  r.leaf = path.filename();
 
         // prepare file descriptor
 
@@ -45,7 +45,7 @@ namespace QuasiFS
             if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); hostpath_status != 0)
                 return hostpath_status;
 
-            if (hio_status = this->hio_driver.Open(host_path_target / path.filename(), flags, mode); hio_status < 0)
+            if (hio_status = this->hio_driver.Open(host_path_target, flags, mode); hio_status < 0)
                 // hosts operation must succeed in order to continue
                 return hio_status;
             host_used = true;
@@ -100,10 +100,55 @@ namespace QuasiFS
         return 0;
     }
 
-    // int QFS::LinkSymbolic(const fs::path &src, const fs::path &dst)
-    // { // stub
-    //     return -1;
-    // }
+    int QFS::LinkSymbolic(const fs::path &src, const fs::path &dst)
+    {
+        Resolved src_res{};
+        Resolved dst_res{};
+        int status_what = Resolve(src, src_res);
+        int status_where = Resolve(dst, dst_res);
+
+        // source may not exist and can point wherever it wants, so we skip checks for it
+
+        if (0 == status_where)
+            return -QUASI_EEXIST;
+        // destination parent directory must exist though
+        if (0 != status_where && nullptr == dst_res.parent)
+            return -QUASI_ENOENT;
+
+        partition_ptr src_part = src_res.mountpoint;
+        partition_ptr dst_part = dst_res.mountpoint;
+
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        // for this to work, both files must be on host partition
+        // mixed source/destination will need a bit more effort
+        if (src_part->IsHostMounted() && dst_part->IsHostMounted())
+        {
+            fs::path host_path_src{};
+            fs::path host_path_dst{};
+
+            if (int hostpath_status = src_part->GetHostPath(host_path_src, src_res.local_path); hostpath_status != 0)
+                return hostpath_status;
+            if (int hostpath_status = dst_part->GetHostPath(host_path_dst, dst_res.local_path); hostpath_status != 0)
+                return hostpath_status;
+
+            if (hio_status = this->hio_driver.LinkSymbolic(host_path_src, host_path_dst); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
+
+        this->vio_driver.set(&dst_res);
+        vio_status = this->vio_driver.LinkSymbolic(src, dst);
+        this->vio_driver.clear();
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    }
 
     int QFS::Link(const fs::path &src, const fs::path &dst)
     {
@@ -293,9 +338,12 @@ namespace QuasiFS
         if (0 == resolve_status)
             return -QUASI_EEXIST;
 
-        // catch what if target exists and is not a file!
-        if (-QUASI_ENOENT != resolve_status)
-            // parent node must exist
+        if (-QUASI_ENOENT == resolve_status)
+        {
+            if (nullptr == r.parent)
+                return -QUASI_ENOENT;
+        }
+        else if (0 != resolve_status)
             return resolve_status;
 
         partition_ptr part = r.mountpoint;

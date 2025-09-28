@@ -47,7 +47,9 @@ namespace QuasiFS
          * Resolve path
          * This is kind of a headache, so TLDR:
          *  1. Parent is:
-         *      * Never null
+         *      * nullptr if resolution failed within the path, i.e. not on the last element
+         *          So /dir/dir_not_exist/dir2 wil return both nulls, while /dir/dir2/file_not_exist
+         *          will return all good with nullptr node
          *      * Last available inode
          *      * Inode that has something mounted (always a dir)
          *  2. Node is:
@@ -83,7 +85,7 @@ namespace QuasiFS
         int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755);
         int Creat(const fs::path &path, quasi_mode_t mode = 0755);
         int Close(const int fd);
-        // int LinkSymbolic(const fs::path &src, const fs::path &dst);
+        int LinkSymbolic(const fs::path &src, const fs::path &dst);
         int Link(const fs::path &src, const fs::path &dst);
         int Unlink(const fs::path &path);
         // int Flush(const int fd);

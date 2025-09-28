@@ -50,23 +50,6 @@ namespace QuasiFS
             if (!(current->is_link() || current->is_dir()) && !is_final)
                 return -QUASI_ENOTDIR;
 
-            // link - return with mountpoint and remaining path
-            // to be resolved by superblock, just check if `node` is a link,
-            // resolve (based in root) symlink path + remainder
-            if (current->is_link())
-            {
-                // Symlink can point to a directory
-                fs::path remainder = "";
-                for (auto p = std::next(part); p != path.end(); p++)
-                    remainder /= *p;
-                path = remainder;
-
-                r.parent = parent;
-                r.node = current;
-                r.leaf = partstr;
-                return 0;
-            }
-
             if (current->is_dir())
             {
                 dir_ptr dir = std::static_pointer_cast<Directory>(current);
@@ -80,15 +63,38 @@ namespace QuasiFS
 
             // file not found in current directory, ENOENT
             if (nullptr == r.node)
+            {
+                // zero out everything
+                // avoids a condition where calling function may think that parent
+                // directory is real parent directory, when in fact we might just stop in the
+                // middle of the path
+                if (!is_final)
+                {
+                    r.node = nullptr;
+                    r.parent = nullptr;
+                }
                 return -QUASI_ENOENT;
+            }
+
+            /**
+             * WARNING
+             * These relations must be saved as-is
+             * Currently CWD is NOT implemented. Might be, might not in the future.
+             * For current purposes all irrelevant Resolved members could be set to nullptr,
+             * but then i'll forget what they were supposed to be.
+             * They need to be saved to build CWD history and enable relative paths (since we may jump over parents)
+             */
 
             // quick lookahead if this directory is a mountpoint
             if (current->is_dir())
             {
                 dir_ptr dir = std::static_pointer_cast<Directory>(current);
-                // same as symlink, if mountpoint is encountered, pass it on to superblock
                 if (dir->mounted_root != nullptr)
                 {
+                    // if it's a mountpoint, the preceeding path is invalid from target partition's POV
+                    // we take remainder of the path (current leaf name belongs to upstream) and leave everything
+                    // AFTER host's path
+                    // since QFS holds mountpoint meta, its it's job to resolve mounted root directory.
                     fs::path remainder = "";
                     for (auto p = std::next(part); p != path.end(); p++)
                         remainder /= *p;
@@ -100,6 +106,20 @@ namespace QuasiFS
 
                     return 0;
                 }
+            }
+
+            if (current->is_link())
+            {
+                // just like with mountpoints, we discard everything up until the "next" element in path
+                fs::path remainder = "";
+                for (auto p = std::next(part); p != path.end(); p++)
+                    remainder /= *p;
+                path = remainder;
+
+                r.parent = parent;
+                r.node = current;
+                r.leaf = partstr;
+                return 0;
             }
         }
 

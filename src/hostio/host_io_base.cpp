@@ -18,6 +18,7 @@ namespace HostIODriver
     int HostIO_Base::Open(const fs::path &path, int flags, quasi_mode_t mode) { STUB(); }
     int HostIO_Base::Creat(const fs::path &path, quasi_mode_t mode) { STUB(); }
     int HostIO_Base::Close(const int fd) { STUB(); }
+    int HostIO_Base::LinkSymbolic(const fs::path &src, const fs::path &dst) { STUB(); }
     int HostIO_Base::Link(const fs::path &src, const fs::path &dst) { STUB(); }
     int HostIO_Base::Unlink(const fs::path &path) { STUB(); }
     int HostIO_Base::Flush(const int fd) { STUB(); }
