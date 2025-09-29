@@ -30,6 +30,14 @@ namespace QuasiFS
         partition_ptr part = r.mountpoint;
         dir_ptr parent_node = std::static_pointer_cast<Directory>(r.parent);
 
+        bool request_read = !(flags & O_WRONLY);
+        bool request_write = flags & (O_WRONLY | O_RDWR);
+
+        mount_t *part_info = GetPartitionInfo(part);
+
+        if ((part_info->options & MountOptions::MOUNT_RW) == 0 && request_write)
+            return -QUASI_EROFS;
+
         // update context fot vdriver
         //  r.leaf = path.filename();
 
@@ -67,8 +75,8 @@ namespace QuasiFS
         handle->node = r.node;
         // virtual fd is stored in open_fd map
         handle->host_fd = hio_status;
-        handle->read = !(flags & O_WRONLY);
-        handle->write = flags & O_WRONLY ? true : (flags & O_RDWR);
+        handle->read = request_read;
+        handle->write = request_write;
         auto next_free_handle = this->GetFreeHandleNo();
         this->open_fd[next_free_handle] = handle;
         return next_free_handle;
@@ -96,7 +104,13 @@ namespace QuasiFS
 
         auto handle_inode_links = &(handle->node->st.st_nlink);
 
-        this->open_fd.at(fd) = nullptr;
+        // if it's the last entry, remove it to avoid blowing up fd table
+        // not really helping with fragmentation, but may save resources on burst opens
+        if (fd != (this->open_fd.size() - 1))
+            return 0;
+
+        this->open_fd.pop_back();
+        this->open_fd.at(fd - 1) = nullptr;
         return 0;
     }
 
@@ -408,13 +422,13 @@ namespace QuasiFS
         return status;
     }
 
-    int QFS::Stat(const fs::path &path, quasi_stat_t *stat)
-    { // stub
-        return -QUASI_EINVAL;
-    }
+    // int QFS::Stat(const fs::path &path, quasi_stat_t *stat)
+    // { // stub
+    //     return -QUASI_EINVAL;
+    // }
 
-    int QFS::FStat(const int fd, quasi_stat_t *statbuf)
-    { // stub
-        return -QUASI_EINVAL;
-    }
+    // int QFS::FStat(const int fd, quasi_stat_t *statbuf)
+    // { // stub
+    //     return -QUASI_EINVAL;
+    // }
 }

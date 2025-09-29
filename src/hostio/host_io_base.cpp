@@ -5,10 +5,6 @@
 #include "../../log.h"
 #include "host_io_base.h"
 
-#define STUB()                              \
-    LogError("Stub called in HostIO_Base"); \
-    return -1;
-
 namespace HostIODriver
 {
 

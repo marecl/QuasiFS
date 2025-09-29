@@ -33,6 +33,7 @@ int main()
   fs::create_directory(test_root_dir);
 
   QFS vh(test_root_dir);
+  // QFS vh;
   // vh.SyncHost();
 
   // vh.MKDir("/mmm");

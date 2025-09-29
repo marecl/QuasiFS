@@ -10,9 +10,12 @@
 
 namespace QuasiFS
 {
-    Partition::Partition(const fs::path &host_root) : block_id(next_block_id++), host_root(host_root.lexically_normal())
+    Partition::Partition(const fs::path &host_root, const int root_permissions) : block_id(next_block_id++), host_root(host_root.lexically_normal())
     {
         this->root = Directory::Create();
+        auto st_mode = &this->root->st.st_mode;
+        // clear defaults, write
+        *st_mode = ((*st_mode) & (~0x1FF)) | root_permissions;
         IndexInode(this->root);
         mkrelative(this->root, this->root);
     };
@@ -98,7 +101,8 @@ namespace QuasiFS
                     fs::path remainder = "";
                     for (auto p = std::next(part); p != path.end(); p++)
                         remainder /= *p;
-                    path = remainder;
+                        // no idea why, but this fixed some edge cases where path was becoming relative o.o
+                    path = remainder.lexically_relative("/");
 
                     r.parent = dir; // no point, unused in this context
                     r.node = dir->mounted_root;

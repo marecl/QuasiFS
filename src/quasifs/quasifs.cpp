@@ -18,10 +18,17 @@ namespace QuasiFS
     {
         this->rootfs = Partition::Create(host_path);
         this->root = rootfs->GetRoot();
-        this->block_devices[this->rootfs->GetBlkId()] = this->rootfs;
+
+        mount_t mount_options = {
+            .mounted_at{"/"},
+            .parent = this->root,
+            .options = MountOptions::MOUNT_RW,
+        };
+
+        this->block_devices[this->rootfs] = mount_options;
     }
 
-    void QFS::SyncHostImpl(partition_ptr &part, const fs::path &dir, std::string prefix)
+    void QFS::SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix)
     {
         fs::path host_path{};
         if (0 != part->GetHostPath(host_path))
@@ -96,7 +103,7 @@ namespace QuasiFS
 
     int QFS::SyncHost(void)
     {
-        for (auto &[blkid, part] : this->block_devices)
+        for (auto &[part, info] : this->block_devices)
         {
             if (part->IsHostMounted())
                 SyncHostImpl(part, "/");
@@ -105,8 +112,9 @@ namespace QuasiFS
         return 0;
     }
 
-    int QFS::Resolve(fs::path path, Resolved &r)
+    int QFS::Resolve(const fs::path &path, Resolved &r)
     {
+        std::string XDXDXD = path;
         if (path.empty())
             return -QUASI_EINVAL;
         if (path.is_relative())
@@ -123,14 +131,16 @@ namespace QuasiFS
         //
         int status{-1};
 
+        fs::path iter_path = path;
+
         r.mountpoint = this->rootfs;
-        r.local_path = path;
+        r.local_path = iter_path;
         r.parent = this->root;
         r.node = this->root;
 
         do
         {
-            status = r.mountpoint->Resolve(path, r);
+            status = r.mountpoint->Resolve(iter_path, r);
 
             if (0 != status)
                 return status;
@@ -142,12 +152,12 @@ namespace QuasiFS
                 // path resolution will enter /link, and extract it as /dirA/dirB.
                 // from that same path, /dirC will be preserved and appened to symlink's target,
                 // which will yield /dirA/dirB/dirC
-                fs::path leftover = path;
+                fs::path leftover = iter_path;
                 // main path is overwritten with absolute path from symlink
-                path = std::static_pointer_cast<Symlink>(r.node)->follow();
+                iter_path = std::static_pointer_cast<Symlink>(r.node)->follow();
                 // and if it's really in the way - restore leftover items
                 if (!leftover.empty())
-                    path /= leftover;
+                    iter_path /= leftover;
                 // reset everything to point to rootfs, where absolute path can be resolved again
                 r.mountpoint = this->rootfs;
                 r.parent = this->root;
@@ -159,29 +169,29 @@ namespace QuasiFS
             if (r.node->is_dir())
             {
                 dir_ptr mntparent = r.parent;
-                dir_ptr mntroot = mntparent->mounted_root;
+                inode_ptr mntroot = mntparent->mounted_root;
 
                 if (nullptr != mntroot)
                 {
+                    if (mntroot != r.node)
+                        LogError("Resolved conflicting mount root and node");
 
                     // just like symlinks, only trailing path is saved
                     // directory, in which partition is mounted, belongs to upstream filesystem,
                     // so everything before (including) that directory is consumed
 
-                    // target partition is resolved with st.st_dev, which is unique for every mounted fs
+                    partition_ptr mounted_partition = GetPartitionByParent(mntparent);
 
-                    auto mounted_blkdev = mntroot->getattr().st_dev;
-
-                    partition_ptr mounted_partition = GetPartitionByBlockdev(mounted_blkdev);
                     if (nullptr == mounted_partition)
                         return -QUASI_ENOENT;
 
                     r.mountpoint = mounted_partition;
-                    r.local_path = path;
+                    r.local_path = iter_path;
+                    // set by partition resolve
                     r.parent = mntparent;
                     r.node = mntroot;
 
-                    if (!path.empty())
+                    if (!iter_path.empty())
                         continue;
                 }
             }
@@ -197,11 +207,8 @@ namespace QuasiFS
     }
 
     // mount fs at path (target must exist and be directory)
-    int QFS::Mount(const fs::path &path, partition_ptr fs)
+    int QFS::Mount(const fs::path &path, partition_ptr fs, unsigned int options)
     {
-        if (nullptr != GetPartitionByBlockdev(fs->GetBlkId()))
-            return -QUASI_EEXIST;
-
         Resolved res{};
         int status = Resolve(path, res);
 
@@ -211,13 +218,29 @@ namespace QuasiFS
         if (!res.node->is_dir())
             return -QUASI_ENOTDIR;
 
+        if (nullptr != GetPartitionInfo(fs))
+        {
+            LogError("Partition cannot be mounted twice");
+            return -QUASI_EEXIST;
+        }
+
+        if (options & MountOptions::MOUNT_BIND)
+            LogError("Mount --bind not implemented");
+
         dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
 
         if (dir->mounted_root)
             return -QUASI_EEXIST;
 
-        dir->mounted_root = fs->GetRoot();
-        this->block_devices[fs->GetBlkId()] = fs;
+        dir_ptr fs_root = fs->GetRoot();
+        mount_t fs_options = {
+            .mounted_at = path,
+            .parent = dir,
+            .options = options,
+        };
+
+        dir->mounted_root = fs_root;
+        this->block_devices[fs] = fs_options;
 
         return 0;
     }
@@ -231,17 +254,23 @@ namespace QuasiFS
         if (0 != status)
             return status;
 
-        if (nullptr == GetPartitionByBlockdev(res.mountpoint->GetBlkId()))
+        partition_ptr part = res.mountpoint;
+        mount_t *part_opts = GetPartitionInfo(part);
+
+        if (nullptr == part_opts)
             return -QUASI_EINVAL;
 
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.parent);
+        dir_ptr dir = std::static_pointer_cast<Directory>(part_opts->parent);
+
+        if (dir != res.parent)
+            LogError("XDXDXD");
 
         if (nullptr == dir->mounted_root)
             // mounted but rootdir disappeared O.o
             return -QUASI_EINVAL;
 
         dir->mounted_root = nullptr;
-        this->block_devices.erase(res.mountpoint->GetBlkId());
+        this->block_devices.erase(part);
 
         return 0;
     }
@@ -258,13 +287,42 @@ namespace QuasiFS
         return open_fd_size;
     }
 
-    partition_ptr QFS::GetPartitionByBlockdev(uint64_t blkid)
+    // partition_ptr QFS::GetPartitionByBlockdev(uint64_t blkid)
+    // {
+    //     auto target_blkdev = this->block_devices.find(blkid);
+    //     // already mounted
+    //     if (target_blkdev == this->block_devices.end())
+    //         return nullptr;
+    //     return target_blkdev->second;
+    // }
+
+    mount_t *QFS::GetPartitionInfo(partition_ptr part)
     {
-        auto target_blkdev = this->block_devices.find(blkid);
+        auto target_part_info = this->block_devices.find(part);
         // already mounted
-        if (target_blkdev == this->block_devices.end())
+        if (target_part_info == this->block_devices.end())
             return nullptr;
-        return target_blkdev->second;
+        return &(target_part_info->second);
+    }
+
+    partition_ptr QFS::GetPartitionByPath(fs::path path)
+    {
+        for (auto &[part, info] : this->block_devices)
+        {
+            if (info.mounted_at == path)
+                return part;
+        }
+        return nullptr;
+    }
+
+    partition_ptr QFS::GetPartitionByParent(dir_ptr dir)
+    {
+        for (auto &[part, info] : this->block_devices)
+        {
+            if (info.parent == dir)
+                return part;
+        }
+        return nullptr;
     }
 
 };

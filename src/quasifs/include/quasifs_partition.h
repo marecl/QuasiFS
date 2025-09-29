@@ -25,7 +25,8 @@ namespace QuasiFS
         const fs::path host_root{};
 
     public:
-        Partition(const fs::path &host_root = "");
+        // host-bound directory, permissions for root directory
+        Partition(const fs::path &host_root = "", const int root_permissions = 0755);
         ~Partition() = default;
 
         template <typename... Args>
@@ -48,8 +49,14 @@ namespace QuasiFS
         // return - valid, out_path - sanitized path
         int GetHostPath(fs::path &output_path, const fs::path &local_path = "/")
         {
+            if (this->host_root.empty())
+                return -QUASI_ENODEV;
+
             // must be relative to root, otherwise lvalue is overwritten
-            fs::path host_path_target = (this->GetHostRoot() / local_path.lexically_relative("/"));
+            fs::path host_path_target = (this->host_root / local_path.lexically_relative("/"));
+            if (host_path_target.empty())
+                return -QUASI_EINVAL;
+
             fs::path host_path_target_sanitized = SanitizePath(host_path_target);
             if (host_path_target_sanitized.empty())
             {
@@ -65,7 +72,6 @@ namespace QuasiFS
 
         dir_ptr GetRoot(void) { return this->root; }
         bool IsHostMounted(void) { return !this->host_root.empty(); }
-        const fs::path GetHostRoot(void) { return this->host_root; }
         blkid_t GetBlkId(void) { return this->block_id; }
         inode_ptr GetInodeByFileno(fileno_t fileno);
 
@@ -91,7 +97,7 @@ namespace QuasiFS
 
         static void mkrelative(dir_ptr parent, dir_ptr child);
 
-        int link(inode_ptr source, dir_ptr destination_parent, const std::string& name);
+        int link(inode_ptr source, dir_ptr destination_parent, const std::string &name);
         int unlink(dir_ptr parent, const std::string &child);
     };
 

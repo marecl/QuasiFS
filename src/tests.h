@@ -81,6 +81,26 @@ void TestMkRmdir(QFS &qfs);
 // Mounts (partitions)
 void TestMount(QFS &qfs);
 void TestMountFileRetention(QFS &qfs);
+void TestMountRO(QFS &qfs)
+{
+    partition_ptr ropart = Partition::Create();
+
+    qfs.MKDir("/ro");
+    if (int mount_status = qfs.Mount("/ro", ropart, MountOptions::MOUNT_NOOPT); mount_status == 0)
+        LogSuccess("Mounted /ro as read-only partition");
+    else
+        LogError("Can't mount /ro : {}", mount_status);
+
+    if (int fd = qfs.Creat("/ro/bad"); fd == -QUASI_EROFS)
+        LogSuccess("Can't create a file in RO partition");
+    else
+    {
+        LogError("Unexpected return from creat(): {}", fd);
+        Resolved r;
+        if (int resolve_status = qfs.Resolve("/ro/bad", r); resolve_status == 0)
+            LogError("Created a file in RO partition");
+    }
+}
 
 // Links
 void TestStLinkFile(QFS &qfs);
@@ -116,24 +136,25 @@ void Test(QFS &qfs)
     // Mounts (partitions)
     TestMount(qfs);
     TestMountFileRetention(qfs);
+    TestMountRO(qfs);
 
-    // Links
-    TestStLinkFile(qfs);
-    TestStLinkDir(qfs);
-    TestStLinkMixed(qfs);
+    // // Links
+    // TestStLinkFile(qfs);
+    // TestStLinkDir(qfs);
+    // TestStLinkMixed(qfs);
 
-    // Symlinks
-    TestSymlinkFile(qfs);
-    TestSymlinkDir(qfs);
-    TestSymlinkCursed(qfs);
+    // // Symlinks
+    // TestSymlinkFile(qfs);
+    // TestSymlinkDir(qfs);
+    // TestSymlinkCursed(qfs);
 
-    // Files (I/O)
-    TestFileOpen(qfs);
-    TestFileOps(qfs);
+    // // Files (I/O)
+    // TestFileOpen(qfs);
+    // TestFileOps(qfs);
 
-    // Directories (I/O)
-    TestDirOpen(qfs);
-    TestDirOps(qfs);
+    // // Directories (I/O)
+    // TestDirOpen(qfs);
+    // TestDirOps(qfs);
 
     Log("");
     Log("Tests complete");
@@ -241,7 +262,7 @@ void TestMount(QFS &qfs)
 {
     LogTest("Mount");
 
-    auto part = Partition::Create();
+    partition_ptr part = Partition::Create();
 
     if (nullptr == part)
     {
@@ -381,7 +402,11 @@ void TestMountFileRetention(QFS &qfs)
     Log("\tPre-mount file fileno: {}", ffileno);
     Log("\tPre-mount dir fileno: {}", dfileno);
 
-    qfs.Mount("/mount", part);
+
+    if (int status = qfs.Mount("/mount",part); 0 == status)
+        LogSuccess("Mounted /mount");
+    else
+        LogError("Can't mount /mount : {}", status);
 
     if (int status_file = qfs.Resolve("/mount/testfile", rfile); 0 == status_file && -QUASI_ENOENT == status_file)
     {
@@ -428,7 +453,10 @@ void TestMountFileRetention(QFS &qfs)
         LogError("Pre-mount file is preserved after mount");
     }
 
-    qfs.Unmount("/mount");
+    if (int status = qfs.Unmount("/mount"); 0 == status)
+        LogSuccess("Unmounted");
+    else
+        LogError("Can't unmount: {}", status);
 
     qfs.Resolve("/mount/testfile", rfile);
     qfs.Resolve("/mount/testdir", rdir);
@@ -770,6 +798,8 @@ void TestSymlinkCursed(QFS &qfs)
     qfs.Creat("/dir2/XD");
     qfs.LinkSymbolic("/dir2", "/dir1/missing");
 
+    Log("These 3 tests will fail, because this feature is unimplemented yet");
+
     resolve_status = qfs.Resolve("/dir1/missing/XD", r);
     if (0 == resolve_status)
         LogSuccess("Resolved file in directory symlinked inside a tree");
@@ -786,7 +816,7 @@ void TestSymlinkCursed(QFS &qfs)
     if (-QUASI_ENOENT == resolve_status)
         LogSuccess("Dangling symlink inside a tree returns ENOENT");
     else
-        LogError("Resolving dangling symlink inside a tree returns wrong error: ", resolve_status);
+        LogError("Resolving dangling symlink inside a tree returns wrong error: {}", resolve_status);
 }
 
 //

@@ -2,10 +2,16 @@
 
 #include <chrono>
 #include <filesystem>
+#include <vector>
+
 #include <sys/types.h>
 
 namespace QuasiFS
 {
+
+    //
+    // Filesystem fundamentals
+    //
 
     namespace fs = std::filesystem;
 
@@ -97,19 +103,16 @@ namespace QuasiFS
         }
     };
 
-    typedef struct Dirent Dirent;
-    using dirent_ptr = std::shared_ptr<Dirent>;
-
-    struct Dirent
+#pragma pack(push, 1)
+    typedef struct dirent_t
     {
-        Dirent() = default;
-        ~Dirent() = default;
         quasi_ino_t d_ino{};
         quasi_off_t d_off{};
         unsigned short d_reclen{};
         unsigned char d_type{};
         char d_name[256]{};
-    };
+    } dirent_t;
+#pragma pack(pop)
 
     enum class SeekOrigin : uint8_t
     {
@@ -118,4 +121,37 @@ namespace QuasiFS
         END
     };
 
+    //
+    // Access
+    //
+
+    namespace User
+    {
+        enum
+        {
+            USER_OWNER = 0x07 << 6,
+            USER_GROUP = 0x07 << 3,
+            USER_OTHER = 0x07 << 0
+        };
+    }
+
+    namespace MountOptions
+    {
+        enum
+        {
+            MOUNT_NOOPT = 0,
+            MOUNT_BIND = 0x01,
+            MOUNT_RW = 0x02,     // 0 - ro
+            MOUNT_EXEC = 0x04,   // 0 - noexec
+            MOUNT_REMOUNT = 0x08 // update mount flags
+        };
+    }
+
+    typedef struct mount_t
+    {
+        // path the partition
+        fs::path mounted_at;
+        dir_ptr parent;
+        unsigned int options;
+    } mount_t;
 }

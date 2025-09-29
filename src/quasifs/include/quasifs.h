@@ -22,9 +22,12 @@ namespace QuasiFS
         // root directory of the root partition ("/")
         dir_ptr root;
 
-        // partition mappings
-        std::unordered_map<uint64_t, partition_ptr> block_devices{};
-        // open file descriptors
+        // inode which holds partitions root in its mounted_root, mountpoint info
+        // this allows us to correlate parent/root inodes with corresponding mount options
+        // this will make a lot of sense when using RO filesystem opt
+        std::unordered_map<partition_ptr, mount_t> block_devices{};
+
+        // open file descriptors. search is linear, looking for first available nullptr
         std::vector<fd_handle_ptr> open_fd;
 
         HostIO hio_driver{};
@@ -38,7 +41,7 @@ namespace QuasiFS
         // QFS methods
         //
         int SyncHost(void);
-        void SyncHostImpl(partition_ptr &part, const fs::path &dir, std::string prefix = "");
+        void SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix = "");
         // Return root directory
         dir_ptr GetRoot() { return this->root; }
         // Return root partition
@@ -70,11 +73,16 @@ namespace QuasiFS
          *      * Name of the last element
          *          * path.filename() if found OR
          *          * name of the element that's NOT found
+         *  6. On mountpoint resolution:
+         *      * leaf - last element (no change)
+         *      * mountpoint - mountpoint (no change)
+         *      * parent - holding dir that is a mountpoint (/dir/INODE->mounted_dir)
+         *      * node - node holding mounted root (/dir/inode->MOUNTED_DIR)
          */
-        int Resolve(fs::path path, Resolved &r);
+        int Resolve(const fs::path &path, Resolved &r);
 
         // mount fs at path (target must exist and be directory)
-        int Mount(const fs::path &path, partition_ptr fs);
+        int Mount(const fs::path &path, partition_ptr fs, unsigned int options = MountOptions::MOUNT_NOOPT);
         // mount fs at path (target must exist and be directory)
         int Unmount(const fs::path &path);
 
@@ -101,8 +109,8 @@ namespace QuasiFS
         int MKDir(const fs::path &path, quasi_mode_t mode = 0755);
         int RMDir(const fs::path &path);
 
-        int Stat(const fs::path &path, quasi_stat_t *stat);
-        int FStat(const int fd, quasi_stat_t *statbuf);
+        // int Stat(const fs::path &path, quasi_stat_t *stat);
+        // int FStat(const int fd, quasi_stat_t *statbuf);
 
         //
         // Complex file operations, QFS specific
@@ -153,7 +161,10 @@ namespace QuasiFS
         // Get next available fd slot
         int GetFreeHandleNo();
         // partition by blkdev
-        partition_ptr GetPartitionByBlockdev(uint64_t blkid);
+        //  partition_ptr GetPartitionByBlockdev(uint64_t blkid);
+        mount_t *GetPartitionInfo(partition_ptr part);
+        partition_ptr GetPartitionByPath(fs::path path);
+        partition_ptr GetPartitionByParent(dir_ptr dir);
     };
 
 };
