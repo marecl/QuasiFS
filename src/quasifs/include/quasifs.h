@@ -165,6 +165,13 @@ namespace QuasiFS
         mount_t *GetPartitionInfo(partition_ptr part);
         partition_ptr GetPartitionByPath(fs::path path);
         partition_ptr GetPartitionByParent(dir_ptr dir);
+
+        fd_handle_ptr GetHandle(int fd)
+        {
+            if (fd < 0 || fd >= this->open_fd.size())
+                return nullptr;
+            return this->open_fd.at(fd);
+        }
     };
 
 };

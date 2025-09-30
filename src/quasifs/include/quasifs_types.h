@@ -90,6 +90,7 @@ namespace QuasiFS
         inode_ptr node{nullptr}; // inode
         bool read{false};        // read permission
         bool write{false};       // write permission
+        bool append{false};      // append
         quasi_off_t pos{0};      // cursor offset
 
         static fd_handle_ptr Create()
@@ -100,6 +101,11 @@ namespace QuasiFS
         bool IsOpen(void)
         {
             return nullptr != this->node;
+        }
+
+        bool IsHostBound(void)
+        {
+            return -1 != host_fd;
         }
     };
 

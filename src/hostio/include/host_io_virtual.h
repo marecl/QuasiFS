@@ -20,6 +20,7 @@ namespace HostIODriver
     {
     protected:
         Resolved *res;
+        fd_handle_ptr handle;
 
     public:
         HostIO_Virtual();
@@ -32,14 +33,16 @@ namespace HostIODriver
         // Path is more of a... suggestion where we might be.
         //
 
-        void set(Resolved *res)
+        void SetCtx(Resolved *res, fd_handle_ptr handle = nullptr)
         {
             this->res = res;
+            this->handle = handle;
         }
 
-        void clear(void)
+        void ClearCtx(void)
         {
             this->res = nullptr;
+            this->handle = nullptr;
         }
 
         //
@@ -53,28 +56,26 @@ namespace HostIODriver
          */
         int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755) override;
         int Creat(const fs::path &path, quasi_mode_t mode = 0755) override;
+        int Close(const int fd) override;
 
-        // unused, QFS handles everything
-        // int Close(const int fd) override;
-
-        int LinkSymbolic(const fs::path &src, const fs::path &dst)override;
+        int LinkSymbolic(const fs::path &src, const fs::path &dst) override;
         int Link(const fs::path &src, const fs::path &dst) override;
         int Unlink(const fs::path &path) override;
-        // int Flush(const int fd) override;
-        // int FSync(const int fd) override;
-        // int Truncate(const fs::path &path, quasi_size_t size) override;
-        // int FTruncate(const int fd, quasi_size_t size) override;
-        // quasi_off_t LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin) override;
-        // quasi_ssize_t Tell(const int fd) override;
-        // quasi_ssize_t Write(const int fd, const void *buf, quasi_size_t count) override;
-        // quasi_ssize_t PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset) override;
-        // quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count) override;
-        // quasi_ssize_t PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset) override;
+        int Flush(const int fd) override;
+        int FSync(const int fd) override;
+        int Truncate(const fs::path &path, quasi_size_t size) override;
+        int FTruncate(const int fd, quasi_size_t size) override;
+        quasi_off_t LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin) override;
+        quasi_ssize_t Tell(const int fd) override;
+        quasi_ssize_t Write(const int fd, const void *buf, quasi_size_t count) override;
+        quasi_ssize_t PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset) override;
+        quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count) override;
+        quasi_ssize_t PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset) override;
         int MKDir(const fs::path &path, quasi_mode_t mode = 0755) override;
         int RMDir(const fs::path &path) override;
 
-        // int Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf) override;
-        // int FStat(const int fd, QuasiFS::quasi_stat_t *statbuf) override;
+        int Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf) override;
+        int FStat(const int fd, QuasiFS::quasi_stat_t *statbuf) override;
 
         //
         // Derived, complex functions are to be handled by main FS class

@@ -101,7 +101,7 @@ namespace QuasiFS
                     fs::path remainder = "";
                     for (auto p = std::next(part); p != path.end(); p++)
                         remainder /= *p;
-                        // no idea why, but this fixed some edge cases where path was becoming relative o.o
+                    // this fixed some edge cases where path was becoming relative o.o
                     path = remainder.lexically_relative("/");
 
                     r.parent = dir; // no point, unused in this context

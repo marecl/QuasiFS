@@ -88,54 +88,45 @@ namespace HostIODriver
         return status == 0 ? status : -errno;
     }
 
-    // quasi_off_t HostIO_POSIX::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = lseek(fd, offset, ToPOSIXSeekOrigin(origin));
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    quasi_off_t HostIO_POSIX::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
+    {
+        errno = 0;
+        int status = lseek(fd, offset, ToPOSIXSeekOrigin(origin));
+        return status == 0 ? status : -errno;
+    }
 
-    // quasi_ssize_t HostIO_POSIX::Tell(const int fd)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = lseek(fd, 0, SEEK_CUR);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    quasi_ssize_t HostIO_POSIX::Tell(const int fd)
+    {
+        return LSeek(fd, 0, SeekOrigin::CURRENT);
+    }
 
-    // quasi_ssize_t HostIO_POSIX::Write(const int fd, const void *buf, quasi_size_t count)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = write(fd, buf, count);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    quasi_ssize_t HostIO_POSIX::Write(const int fd, const void *buf, quasi_size_t count)
+    {
+        errno = 0;
+        int status = write(fd, buf, count);
+        return status >= 0 ? status : -errno;
+    }
 
-    // quasi_ssize_t HostIO_POSIX::PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = pwrite(fd, buf, count, offset);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    quasi_ssize_t HostIO_POSIX::PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
+    {
+        errno = 0;
+        int status = pwrite(fd, buf, count, offset);
+        return status >= 0 ? status : -errno;
+    }
 
-    // quasi_ssize_t HostIO_POSIX::Read(const int fd, void *buf, quasi_size_t count)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = read(fd, buf, count);
-    //     this->_errno = errno;
-    //     return status;
-    // }
+    quasi_ssize_t HostIO_POSIX::Read(const int fd, void *buf, quasi_size_t count)
+    {
+        errno = 0;
+        int status = read(fd, buf, count);
+        return status >= 0 ? status : -errno;
+    }
 
-    // quasi_ssize_t HostIO_POSIX::PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset)
-    // {
-    //     errno = this->_errno = 0;
-    //     int status = pread(fd, buf, count, offset);
-    //     this->_errno = errno;
-
-    //     return status;
-    // }
+    quasi_ssize_t HostIO_POSIX::PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset)
+    {
+        errno = 0;
+        int status = pread(fd, buf, count, offset);
+        return status >= 0 ? status : -errno;
+    }
 
     int HostIO_POSIX::MKDir(const fs::path &path, quasi_mode_t mode)
     {
@@ -157,8 +148,7 @@ namespace HostIODriver
 
         struct stat st;
 
-        int stat_status;
-        if (stat_status = stat(path.c_str(), &st); stat_status != 0)
+        if (int stat_status = stat(path.c_str(), &st); stat_status != 0)
             return stat_status;
 
         // handled by QFS
@@ -183,8 +173,7 @@ namespace HostIODriver
 
         struct stat st;
 
-        int fstat_status;
-        if (fstat_status = fstat(fd, &st); fstat_status != 0)
+        if (int fstat_status = fstat(fd, &st); fstat_status != 0)
             return fstat_status;
 
         // handled by QFS

@@ -40,6 +40,7 @@ void LogCustom(const std::string_view fn, const std::string_view msg, std::forma
         LogTest("Unimplemented ({}:{})", __FILE__, __LINE__); \
     }
 
+// return ENOSYS
 #define STUB()                                                         \
     LogError("Stub called in HostIO_Base: {}:{}", __FILE__, __LINE__); \
-    return -1;
+    return -38;

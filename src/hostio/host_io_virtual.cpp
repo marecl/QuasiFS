@@ -1,3 +1,4 @@
+#include <cstring>
 #include <filesystem>
 
 #include <sys/types.h>
@@ -24,16 +25,11 @@ namespace HostIODriver
         if (nullptr == this->res)
             return -QUASI_EINVAL;
 
-
-
         inode_ptr target = this->res->node;
         dir_ptr parent = this->res->parent;
         partition_ptr part = this->res->mountpoint;
 
         bool exists = this->res->node != nullptr;
-
-        // check for RO!
-        std::string qweqwe =this->res->local_path;
 
         if (exists && (flags & O_EXCL) && (flags & O_CREAT))
             return -QUASI_EEXIST;
@@ -99,11 +95,10 @@ namespace HostIODriver
         return this->res->mountpoint->touch(parent, path.filename(), new_file);
     }
 
-    // unused, QFS handles everything
-    // int HostIO_Virtual::Close(const int fd)
-    // {
-    //     return 0;
-    // }
+    int HostIO_Virtual::Close(const int fd)
+    {
+        return -QUASI_ENOSYS;
+    }
 
     int HostIO_Virtual::LinkSymbolic(const fs::path &src, const fs::path &dst)
     {
@@ -166,75 +161,161 @@ namespace HostIODriver
         return res->mountpoint->rmInode(res->node);
     }
 
-    // int HostIO_Virtual::Flush(const int fd)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+    int HostIO_Virtual::Flush(const int fd)
+    {
+        // not applicable
+        return 0;
+    }
 
-    // int HostIO_Virtual::FSync(const int fd)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+    int HostIO_Virtual::FSync(const int fd)
+    {
+        // not applicable
+        return 0;
+    }
 
-    // int HostIO_Virtual::Truncate(const fs::path &path, quasi_size_t size)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+    int HostIO_Virtual::Truncate(const fs::path &path, quasi_size_t size)
+    {
+        if (nullptr == this->res)
+            return -QUASI_EINVAL;
 
-    // int HostIO_Virtual::FTruncate(const int fd, quasi_size_t size)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+        inode_ptr node = this->res->node;
 
-    // quasi_off_t HostIO_Virtual::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+        if (nullptr == node)
+            return -QUASI_EBADF;
 
-    // quasi_ssize_t HostIO_Virtual::Tell(const int fd)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+        if (node->is_dir())
+            return -QUASI_EISDIR;
 
-    // quasi_ssize_t HostIO_Virtual::Write(const int fd, const void *buf, quasi_size_t count)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+        if (!node->is_file())
+            return -QUASI_EINVAL;
 
-    // quasi_ssize_t HostIO_Virtual::PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+        return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
+    }
 
-    // quasi_ssize_t HostIO_Virtual::Read(const int fd, void *buf, quasi_size_t count)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+    int HostIO_Virtual::FTruncate(const int fd, quasi_size_t size)
+    {
+        if (nullptr == handle)
+            return -QUASI_EINVAL;
 
-    // quasi_ssize_t HostIO_Virtual::PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+        inode_ptr node = handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        if (node->is_dir())
+            return -QUASI_EISDIR;
+
+        if (!node->is_file())
+            return -QUASI_EINVAL;
+
+        return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
+    }
+
+    quasi_off_t HostIO_Virtual::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
+    {
+        if (nullptr == handle)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        auto ptr = &handle->pos;
+
+        quasi_off_t new_ptr =
+            (origin == SeekOrigin::ORIGIN) * offset +
+            (origin == SeekOrigin::CURRENT) * (*(ptr) + offset) +
+            (origin == SeekOrigin::END) * (node->st.st_size + offset);
+
+        if (new_ptr < 0)
+            return -QUASI_EINVAL;
+
+        *ptr = new_ptr;
+        return *ptr;
+    }
+
+    quasi_ssize_t HostIO_Virtual::Tell(const int fd)
+    {
+        return LSeek(fd, 0, SeekOrigin::CURRENT);
+    }
+
+    quasi_ssize_t HostIO_Virtual::Write(const int fd, const void *buf, quasi_size_t count)
+    {
+        if (nullptr == handle)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        if (handle->append)
+            handle->pos = node->st.st_size;
+
+        ssize_t bw = node->write(handle->pos, buf, count);
+
+        if (bw > 0)
+        {
+            auto new_size = node->st.st_size - handle->pos - bw;
+            node->st.st_size -= new_size * (new_size < 0);
+            handle->pos += bw;
+        }
+
+        return bw;
+    }
+
+    quasi_ssize_t HostIO_Virtual::PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
+    {
+        if (nullptr == handle)
+            return -QUASI_EBADF;
+
+        inode_ptr node = handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        ssize_t bw = node->write(offset, buf, count);
+
+        if (bw > 0)
+        {
+            auto new_size = node->st.st_size - handle->pos - bw;
+            node->st.st_size -= new_size * (new_size < 0);
+        }
+
+        return bw;
+    }
+
+    quasi_ssize_t HostIO_Virtual::Read(const int fd, void *buf, quasi_size_t count)
+    {
+        if (nullptr == handle)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        ssize_t br = node->read(handle->pos, buf, count);
+
+        if (br > 0)
+            handle->pos += br;
+
+        return br;
+    }
+
+    quasi_ssize_t HostIO_Virtual::PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset)
+    {
+        if (nullptr == handle)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        return node->read(offset, buf, count);
+    }
 
     int HostIO_Virtual::MKDir(const fs::path &path, quasi_mode_t mode)
     {
@@ -271,17 +352,33 @@ namespace HostIODriver
         return res->mountpoint->rmInode(res->node);
     }
 
-    // int HostIO_Virtual::Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+    int HostIO_Virtual::Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf)
+    {
+        if (nullptr == this->res)
+            return -QUASI_EINVAL;
 
-    // int HostIO_Virtual::FStat(const int fd, QuasiFS::quasi_stat_t *statbuf)
-    // {
-    //     if (nullptr == this->res)
-    //         return -1;
-    //     return -1;
-    // }
+        inode_ptr node = this->res->node;
+
+        if (nullptr == node)
+            return -QUASI_ENOENT;
+
+        memcpy(statbuf, &node->st, sizeof(quasi_stat_t));
+
+        return 0;
+    }
+
+    int HostIO_Virtual::FStat(const int fd, QuasiFS::quasi_stat_t *statbuf)
+    {
+        if (nullptr == this->handle)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = this->handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        memcpy(statbuf, &node->st, sizeof(quasi_stat_t));
+
+        return 0;
+    }
 }
