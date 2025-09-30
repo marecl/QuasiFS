@@ -44,3 +44,15 @@ void LogCustom(const std::string_view fn, const std::string_view msg, std::forma
 #define STUB()                                                         \
     LogError("Stub called in HostIO_Base: {}:{}", __FILE__, __LINE__); \
     return -38;
+
+#define TEST(cond, success_fmt, fail_fmt, ...)      \
+    {                                               \
+        if (cond)                                   \
+        {                                           \
+            LogSuccess(success_fmt, ##__VA_ARGS__); \
+        }                                           \
+        else                                        \
+        {                                           \
+            LogError(fail_fmt, ##__VA_ARGS__);      \
+        }                                           \
+    }

@@ -25,9 +25,9 @@ namespace HostIODriver
         if (nullptr == this->res)
             return -QUASI_EINVAL;
 
-        inode_ptr target = this->res->node;
-        dir_ptr parent = this->res->parent;
         partition_ptr part = this->res->mountpoint;
+        dir_ptr parent = this->res->parent;
+        inode_ptr target = this->res->node;
 
         bool exists = this->res->node != nullptr;
 
@@ -68,7 +68,7 @@ namespace HostIODriver
             // opening dirs isn't supported yet
             return -QUASI_ENOTDIR;
 
-        if (flags & (O_APPEND | O_NOFOLLOW | O_PATH /* | O_TMPFILE */))
+        if (flags & (O_NOFOLLOW | O_PATH /* | O_TMPFILE */))
         {
             // O_TMPFILE expansion includes O_DIRECTORY
             // not implemented
@@ -97,7 +97,8 @@ namespace HostIODriver
 
     int HostIO_Virtual::Close(const int fd)
     {
-        return -QUASI_ENOSYS;
+        // N/A
+        return 0;
     }
 
     int HostIO_Virtual::LinkSymbolic(const fs::path &src, const fs::path &dst)
@@ -189,7 +190,10 @@ namespace HostIODriver
         if (!node->is_file())
             return -QUASI_EINVAL;
 
-        return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
+        if (host_bound)
+            return std::static_pointer_cast<RegularFile>(handle->node)->MockTruncate(size);
+        else
+            return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
     }
 
     int HostIO_Virtual::FTruncate(const int fd, quasi_size_t size)
@@ -208,7 +212,10 @@ namespace HostIODriver
         if (!node->is_file())
             return -QUASI_EINVAL;
 
-        return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
+        if (host_bound)
+            return std::static_pointer_cast<RegularFile>(handle->node)->MockTruncate(size);
+        else
+            return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
     }
 
     quasi_off_t HostIO_Virtual::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
@@ -242,25 +249,10 @@ namespace HostIODriver
 
     quasi_ssize_t HostIO_Virtual::Write(const int fd, const void *buf, quasi_size_t count)
     {
-        if (nullptr == handle)
-            return -QUASI_EINVAL;
-
-        inode_ptr node = handle->node;
-
-        if (nullptr == node)
-            return -QUASI_EBADF;
-
-        if (handle->append)
-            handle->pos = node->st.st_size;
-
-        ssize_t bw = node->write(handle->pos, buf, count);
+        ssize_t bw = this->PWrite(fd, buf, count, handle->pos);
 
         if (bw > 0)
-        {
-            auto new_size = node->st.st_size - handle->pos - bw;
-            node->st.st_size -= new_size * (new_size < 0);
             handle->pos += bw;
-        }
 
         return bw;
     }
@@ -275,28 +267,24 @@ namespace HostIODriver
         if (nullptr == node)
             return -QUASI_EBADF;
 
-        ssize_t bw = node->write(offset, buf, count);
+        if (handle->append)
+            offset = node->st.st_size;
 
-        if (bw > 0)
+        ssize_t bw = 0;
+
+        if (this->host_bound && node->is_file())
         {
-            auto new_size = node->st.st_size - handle->pos - bw;
-            node->st.st_size -= new_size * (new_size < 0);
+            bw = std::static_pointer_cast<RegularFile>(node)->MockWrite(offset, buf, count);
         }
+        else
+            bw = node->write(offset, buf, count);
 
         return bw;
     }
 
     quasi_ssize_t HostIO_Virtual::Read(const int fd, void *buf, quasi_size_t count)
     {
-        if (nullptr == handle)
-            return -QUASI_EINVAL;
-
-        inode_ptr node = handle->node;
-
-        if (nullptr == node)
-            return -QUASI_EBADF;
-
-        ssize_t br = node->read(handle->pos, buf, count);
+        ssize_t br = PRead(fd, buf, count, handle->pos);
 
         if (br > 0)
             handle->pos += br;
@@ -313,6 +301,9 @@ namespace HostIODriver
 
         if (nullptr == node)
             return -QUASI_EBADF;
+
+        if (this->host_bound && node->is_file())
+            return std::static_pointer_cast<RegularFile>(node)->MockRead(offset, buf, count);
 
         return node->read(offset, buf, count);
     }

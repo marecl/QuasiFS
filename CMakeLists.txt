@@ -4,6 +4,7 @@ project(quasi_fs LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+add_compile_options(-Wall -Wunused)
 
 add_subdirectory(src/dev)
 add_subdirectory(src/hostio)

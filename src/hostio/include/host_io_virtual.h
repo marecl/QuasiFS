@@ -19,8 +19,9 @@ namespace HostIODriver
     class HostIO_Virtual : public HostIO_Base
     {
     protected:
-        Resolved *res;
-        fd_handle_ptr handle;
+        Resolved *res{nullptr};
+        fd_handle_ptr handle{nullptr};
+        bool host_bound{false};
 
     public:
         HostIO_Virtual();
@@ -33,9 +34,10 @@ namespace HostIODriver
         // Path is more of a... suggestion where we might be.
         //
 
-        void SetCtx(Resolved *res, fd_handle_ptr handle = nullptr)
+        void SetCtx(Resolved *res, bool host_bound, fd_handle_ptr handle)
         {
             this->res = res;
+            this->host_bound = host_bound;
             this->handle = handle;
         }
 
@@ -43,6 +45,7 @@ namespace HostIODriver
         {
             this->res = nullptr;
             this->handle = nullptr;
+            this->host_bound = false;
         }
 
         //

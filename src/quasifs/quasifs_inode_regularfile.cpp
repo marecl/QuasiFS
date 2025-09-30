@@ -31,23 +31,15 @@ namespace QuasiFS
 
     quasi_ssize_t RegularFile::write(quasi_off_t offset, const void *buf, quasi_size_t count)
     {
-        quasi_off_t idx = 0;
+        auto size = &this->st.st_size;
+        auto end_pos = offset + count;
+        *size = end_pos > *size ? end_pos : *size;
 
-        // write overlapping data
-        for (idx = 0; idx + offset < this->data.size(); idx++)
-        {
-            this->data[idx + offset] = static_cast<const char *>(buf)[idx];
-        }
+        // size can only be greater, so it will always scale up
+        this->data.resize(*size, 0);
 
-        // append
-        quasi_size_t maxidx = this->data.size() - offset + count;
-        for (; idx < maxidx; idx++)
-        {
-            char c = static_cast<const char *>(buf)[idx];
-            this->data.push_back(c);
-        }
-
-        this->st.st_size += idx;
+        for (quasi_off_t idx = offset; idx < *size; idx++)
+            this->data[idx] = static_cast<const char *>(buf)[idx];
 
         return count;
     }
@@ -58,6 +50,32 @@ namespace QuasiFS
             return -QUASI_EINVAL;
         this->data.resize(length, 0);
         this->st.st_size = length;
-        return length;
+        return 0;
+    }
+
+    quasi_ssize_t RegularFile::MockRead(quasi_off_t offset, void *buf, quasi_size_t count)
+    {
+        auto size = &this->st.st_size;
+        auto end_pos = offset + count;
+
+        return end_pos > *size ? *size - offset : count;
+    }
+
+    quasi_ssize_t RegularFile::MockWrite(quasi_off_t offset, const void *buf, quasi_size_t count)
+    {
+        auto size = &this->st.st_size;
+        auto end_pos = offset + count;
+
+        *size = end_pos > *size ? end_pos : *size;
+
+        return count;
+    }
+
+    int RegularFile::MockTruncate(quasi_off_t length)
+    {
+        if (length < 0)
+            return -QUASI_EINVAL;
+        this->st.st_size = length;
+        return 0;
     }
 }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <unordered_map>
-#include <sys/fcntl.h>
 
 #include "../../hostio/include/host_io.h"
 #include "quasifs_types.h"
@@ -40,12 +39,19 @@ namespace QuasiFS
         //
         // QFS methods
         //
+
+        // Sync mounted partitions with host directories
         int SyncHost(void);
-        void SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix = "");
         // Return root directory
         dir_ptr GetRoot() { return this->root; }
         // Return root partition
         partition_ptr GetRootFS() { return this->rootfs; }
+   
+        // mount fs at path (target must exist and be directory)
+        int Mount(const fs::path &path, partition_ptr fs, unsigned int options = MountOptions::MOUNT_NOOPT);
+        // mount fs at path (target must exist and be directory)
+        int Unmount(const fs::path &path);
+        
         /**
          * Resolve path
          * This is kind of a headache, so TLDR:
@@ -81,15 +87,13 @@ namespace QuasiFS
          */
         int Resolve(const fs::path &path, Resolved &r);
 
-        // mount fs at path (target must exist and be directory)
-        int Mount(const fs::path &path, partition_ptr fs, unsigned int options = MountOptions::MOUNT_NOOPT);
-        // mount fs at path (target must exist and be directory)
-        int Unmount(const fs::path &path);
 
         //
         // Inherited from HostIOBase
         // Raw file operations
+        // man(2)
         //
+        
         int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755);
         int Creat(const fs::path &path, quasi_mode_t mode = 0755);
         int Close(const int fd);
@@ -98,26 +102,23 @@ namespace QuasiFS
         int Unlink(const fs::path &path);
         // int Flush(const int fd);
         // int FSync(const int fd);
-        // int Truncate(const fs::path &path, quasi_size_t size);
-        // int FTruncate(const int fd, quasi_size_t size);
-        // quasi_off_t LSeek(const int fd, quasi_off_t offset, SeekOrigin origin);
-        // quasi_ssize_t Tell(const int fd);
-        // quasi_ssize_t Write(const int fd, const void *buf, quasi_size_t count);
-        // quasi_ssize_t PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset);
-        // quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count);
-        // quasi_ssize_t PRead(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset);
+        int Truncate(const fs::path &path, quasi_size_t size);
+        int FTruncate(const int fd, quasi_size_t size);
+        quasi_off_t LSeek(const int fd, quasi_off_t offset, SeekOrigin origin);
+        quasi_ssize_t Tell(const int fd);
+        quasi_ssize_t Write(const int fd, const void *buf, quasi_size_t count);
+        quasi_ssize_t PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset);
+        quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count);
+        quasi_ssize_t PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset);
         int MKDir(const fs::path &path, quasi_mode_t mode = 0755);
         int RMDir(const fs::path &path);
 
-        // int Stat(const fs::path &path, quasi_stat_t *stat);
-        // int FStat(const int fd, quasi_stat_t *statbuf);
+        int Stat(const fs::path &path, quasi_stat_t *statbuf);
+        int FStat(const int fd, quasi_stat_t *statbuf);
 
         //
-        // Complex file operations, QFS specific
+        // Additional binds
         //
-
-        // Remove link from [where]
-        // int Unlink(const std::string &where);
 
         quasi_ssize_t getdirectorysize(const fs::path &path) { return -QUASI_EINVAL; };
         int IsOpen(const int fd) noexcept { return -QUASI_EINVAL; };
@@ -126,7 +127,10 @@ namespace QuasiFS
         // Not a port, used by 2-3 functions that *never* check for errors
         quasi_ssize_t GetDirectorySize(const fs::path &path) noexcept { return -QUASI_EINVAL; };
 
+        //
         // C++ ports with both except/noexcept
+        //
+
         int64_t GetSize(const fs::path &path) { return -QUASI_EINVAL; };
         int64_t GetSize(const fs::path &path, std::error_code &ec) noexcept { return -QUASI_EINVAL; };
         bool Exists(const fs::path &path) { return -QUASI_EINVAL; };
@@ -158,20 +162,17 @@ namespace QuasiFS
         bool CreateDirectories(const fs::path &path, std::error_code &ec, int mode = 0777) noexcept { return -QUASI_EINVAL; };
 
     private:
+        void SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix = "");
+
         // Get next available fd slot
         int GetFreeHandleNo();
+        fd_handle_ptr GetHandle(int fd);
         // partition by blkdev
         //  partition_ptr GetPartitionByBlockdev(uint64_t blkid);
         mount_t *GetPartitionInfo(partition_ptr part);
         partition_ptr GetPartitionByPath(fs::path path);
         partition_ptr GetPartitionByParent(dir_ptr dir);
-
-        fd_handle_ptr GetHandle(int fd)
-        {
-            if (fd < 0 || fd >= this->open_fd.size())
-                return nullptr;
-            return this->open_fd.at(fd);
-        }
+        int IsPartitionRO(partition_ptr part);
     };
 
 };

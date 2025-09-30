@@ -35,40 +35,10 @@ namespace QuasiFS
             return std::make_shared<Partition>(std::forward<Args>(args)...);
         }
 
-        fs::path SanitizePath(const fs::path &path)
-        {
-            // lexically normal to resolve relative calls
-            // avoids going OOB with malicious file names
-            fs::path tmp = path.lexically_normal();
-            if (tmp.string().find(this->host_root, 0) == 0)
-                return tmp;
-
-            return {};
-        }
-
+        // empty - invalid, not empty - safe
+        fs::path SanitizePath(const fs::path &path);
         // return - valid, out_path - sanitized path
-        int GetHostPath(fs::path &output_path, const fs::path &local_path = "/")
-        {
-            if (this->host_root.empty())
-                return -QUASI_ENODEV;
-
-            // must be relative to root, otherwise lvalue is overwritten
-            fs::path host_path_target = (this->host_root / local_path.lexically_relative("/"));
-            if (host_path_target.empty())
-                return -QUASI_EINVAL;
-
-            fs::path host_path_target_sanitized = SanitizePath(host_path_target);
-            if (host_path_target_sanitized.empty())
-            {
-                LogError("Malicious path detected: {}", host_path_target.string());
-                return -QUASI_EACCES;
-            }
-            output_path = host_path_target_sanitized;
-            Log("Resolving local {} to {}", local_path.string(), host_path_target_sanitized.string());
-            // if (local_path.string().size() >= 256)
-            //     return -QUASI_ENAMETOOLONG;
-            return 0;
-        }
+        int GetHostPath(fs::path &output_path, const fs::path &local_path = "/");
 
         dir_ptr GetRoot(void) { return this->root; }
         bool IsHostMounted(void) { return !this->host_root.empty(); }

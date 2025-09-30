@@ -1,3 +1,7 @@
+#include <cstring>
+
+#include <sys/fcntl.h>
+
 #include "include/quasi_errno.h"
 #include "include/quasifs_types.h"
 
@@ -30,18 +34,28 @@ namespace QuasiFS
         partition_ptr part = r.mountpoint;
         dir_ptr parent_node = std::static_pointer_cast<Directory>(r.parent);
 
-        bool request_read = !(flags & O_WRONLY);
+        bool request_read = !(flags & O_WRONLY) | O_RDWR;
         bool request_write = flags & (O_WRONLY | O_RDWR);
+        bool request_append = flags & O_APPEND;
 
-        mount_t *part_info = GetPartitionInfo(part);
+        //
+        // Prioritize QFS permissions
+        // Host is (usually) more lenient
+        //
 
-        if ((part_info->options & MountOptions::MOUNT_RW) == 0 && request_write)
+        if (IsPartitionRO(part))
             return -QUASI_EROFS;
 
-        // update context fot vdriver
-        //  r.leaf = path.filename();
+        // if it doesn't exist, check the parent
+        inode_ptr checked_node = nullptr == r.node ? parent_node : r.node;
 
-        // prepare file descriptor
+        if ((request_read && !checked_node->CanRead()) ||
+            (request_write && !checked_node->CanWrite()))
+            return -QUASI_EACCES;
+
+        //
+        // Proceed
+        //
 
         bool host_used = false;
         int hio_status = 0;
@@ -59,9 +73,9 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.set(&r);
-        vio_status = this->vio_driver.Open(path, flags, mode);
-        this->vio_driver.clear();
+        this->vio_driver.SetCtx(&r, host_used, nullptr);
+        vio_status = this->vio_driver.Open(r.local_path, flags, mode);
+        this->vio_driver.ClearCtx();
 
         if (int tmp_hio_status = hio_status >= 0 ? 0 : hio_status; host_used && (tmp_hio_status != vio_status))
             LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
@@ -77,6 +91,7 @@ namespace QuasiFS
         handle->host_fd = hio_status;
         handle->read = request_read;
         handle->write = request_write;
+        handle->append = request_append;
         auto next_free_handle = this->GetFreeHandleNo();
         this->open_fd[next_free_handle] = handle;
         return next_free_handle;
@@ -89,10 +104,7 @@ namespace QuasiFS
 
     int QFS::Close(int fd)
     {
-        if (fd < 0 || fd >= this->open_fd.size())
-            return -QUASI_EBADF;
-
-        fd_handle_ptr handle = this->open_fd.at(fd);
+        fd_handle_ptr handle = GetHandle(fd);
         if (nullptr == handle)
             return -QUASI_EBADF;
 
@@ -100,17 +112,19 @@ namespace QuasiFS
         if (int hio_status = this->hio_driver.Close(handle->host_fd); hio_status < 0)
             return hio_status;
 
-        // no further action is required
-
-        auto handle_inode_links = &(handle->node->st.st_nlink);
+        // no further action is required, this is pro-forma
+        this->vio_driver.Close(fd);
 
         // if it's the last entry, remove it to avoid blowing up fd table
         // not really helping with fragmentation, but may save resources on burst opens
-        if (fd != (this->open_fd.size() - 1))
+
+        if (fd < (this->open_fd.size() - 1))
+        {
+            this->open_fd.at(fd) = nullptr;
             return 0;
+        }
 
         this->open_fd.pop_back();
-        this->open_fd.at(fd - 1) = nullptr;
         return 0;
     }
 
@@ -154,9 +168,10 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.set(&dst_res);
-        vio_status = this->vio_driver.LinkSymbolic(src, dst);
-        this->vio_driver.clear();
+        this->vio_driver.SetCtx(&dst_res, host_used, nullptr);
+        // src stays 1:1
+        vio_status = this->vio_driver.LinkSymbolic(src, dst_res.local_path);
+        this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
             LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
@@ -201,9 +216,9 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.set(&src_res);
+        this->vio_driver.SetCtx(&src_res, host_used, nullptr);
         vio_status = this->vio_driver.Link(src_res.local_path, dst_res.local_path);
-        this->vio_driver.clear();
+        this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
             LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
@@ -239,9 +254,9 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.set(&r);
+        this->vio_driver.SetCtx(&r, host_used, nullptr);
         vio_status = this->vio_driver.Unlink(r.local_path);
-        this->vio_driver.clear();
+        this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
             LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
@@ -261,88 +276,230 @@ namespace QuasiFS
     //     return this->hio_driver.FSync(fd);
     // };
 
-    // int QFS::Truncate(const fs::path &path, quasi_size_t length)
-    // {
-    //     Resolved r{};
-    //     int status = Resolve(path, r);
-    //     if (0 != status)
-    //         return status;
-    //     if (r.node->is_file())
-    //         return std::static_pointer_cast<RegularFile>(r.node)->truncate(length);
-    //     return -QUASI_EINVAL;
-    // }
+    int QFS::Truncate(const fs::path &path, quasi_size_t length)
+    {
+        Resolved r{};
+        int status = Resolve(path, r);
 
-    // int QFS::FTruncate(const int fd, quasi_size_t length)
-    // {
-    //     if (0 > fd || fd >= this->open_fd.size())
-    //         return -QUASI_EBADF;
-    //     fd_handle_ptr handle = this->open_fd.at(fd);
-    //     inode_ptr target = handle->node;
+        if (0 != status)
+            return status;
 
-    //     if (target->is_file())
-    //         return std::static_pointer_cast<RegularFile>(target)->truncate(length);
-    //     return -QUASI_EBADF;
-    // }
+        partition_ptr part = r.mountpoint;
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
 
-    // quasi_off_t QFS::LSeek(const int fd, quasi_off_t offset, SeekOrigin origin)
-    // { // stub
-    //     return -QUASI_EINVAL;
-    // };
+        if (part->IsHostMounted())
+        {
+            fs::path host_path_target;
+            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); 0 != hostpath_status)
+                return hostpath_status;
+            if (hio_status = this->hio_driver.Truncate(host_path_target, length); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
 
-    // quasi_ssize_t QFS::Tell(int fd)
-    // { // stub
-    //     return -QUASI_EINVAL;
-    // };
+        this->vio_driver.SetCtx(&r, host_used, nullptr);
+        vio_status = this->vio_driver.Truncate(r.local_path, length);
+        this->vio_driver.ClearCtx();
 
-    // quasi_ssize_t QFS::Write(const int fd, const void *buf, quasi_size_t count)
-    // {
-    //     return PWrite(fd, buf, count, 0);
-    // }
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
 
-    // quasi_ssize_t QFS::PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
-    // { // stub
-    //     return -QUASI_EINVAL;
-    // };
+        return vio_status;
+    }
 
-    // quasi_ssize_t QFS::pwrite(int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
-    // {
-    //     if (0 > fd || fd >= this->open_fd.size())
-    //         return -QUASI_EBADF;
-    //     fd_handle_ptr handle = this->open_fd.at(fd);
-    //     if (!handle->write)
-    //         return -QUASI_EBADF;
+    int QFS::FTruncate(const int fd, quasi_size_t length)
+    {
+        fd_handle_ptr handle = GetHandle(fd);
+        if (nullptr == handle)
+            return -QUASI_EBADF;
 
-    //     inode_ptr target = handle->node;
-    //     if (target->is_file())
-    //         return std::static_pointer_cast<RegularFile>(target)->write(offset, buf, count);
-    //     // TODO: remaining types
-    //     return -QUASI_EBADF;
-    // }
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
 
-    // quasi_ssize_t QFS::Read(const int fd, void *buf, quasi_size_t count)
-    // {
-    //     return PRead(fd, buf, count, 0);
-    // }
+        if (handle->IsHostBound())
+        {
+            int host_fd = handle->host_fd;
+            if (hio_status = this->hio_driver.FTruncate(host_fd, length); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
 
-    // quasi_ssize_t QFS::PRead(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
-    // { // stub
-    //     return -QUASI_EINVAL;
-    // };
+        this->vio_driver.SetCtx(nullptr, host_used, handle);
+        vio_status = this->vio_driver.FTruncate(fd, length);
+        this->vio_driver.ClearCtx();
 
-    // quasi_ssize_t QFS::pread(int fd, void *buf, quasi_size_t count, quasi_off_t offset)
-    // {
-    //     if (0 > fd || fd >= this->open_fd.size())
-    //         return -QUASI_EBADF;
-    //     fd_handle_ptr handle = this->open_fd.at(fd);
-    //     if (!handle->read)
-    //         return -QUASI_EBADF;
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
 
-    //     inode_ptr target = handle->node;
-    //     if (target->is_file())
-    //         return std::static_pointer_cast<RegularFile>(target)->read(offset, buf, count);
-    //     // TODO: remaining types
-    //     return -QUASI_EBADF;
-    // }
+        return vio_status;
+    }
+
+    quasi_off_t QFS::LSeek(const int fd, quasi_off_t offset, SeekOrigin origin)
+    {
+        fd_handle_ptr handle = GetHandle(fd);
+        if (nullptr == handle)
+            return -QUASI_EBADF;
+
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        if (handle->IsHostBound())
+        {
+            int host_fd = handle->host_fd;
+            if (hio_status = this->hio_driver.LSeek(host_fd, offset, origin); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
+
+        this->vio_driver.SetCtx(nullptr, host_used, handle);
+        vio_status = this->vio_driver.LSeek(fd, offset, origin);
+        this->vio_driver.ClearCtx();
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    };
+
+    quasi_ssize_t QFS::Tell(int fd)
+    {
+        return LSeek(fd, 0, SeekOrigin::CURRENT);
+    };
+
+    quasi_ssize_t QFS::Write(const int fd, const void *buf, quasi_size_t count)
+    {
+        fd_handle_ptr handle = GetHandle(fd);
+        if (nullptr == handle)
+            return -QUASI_EBADF;
+
+        if (!handle->write)
+            return -QUASI_EBADF;
+
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        if (handle->IsHostBound())
+        {
+            int host_fd = handle->host_fd;
+            if (hio_status = this->hio_driver.Write(host_fd, buf, count); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
+
+        this->vio_driver.SetCtx(nullptr, host_used, handle);
+        vio_status = this->vio_driver.Write(fd, buf, count);
+        this->vio_driver.ClearCtx();
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    }
+
+    quasi_ssize_t QFS::PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset)
+    {
+        fd_handle_ptr handle = GetHandle(fd);
+        if (nullptr == handle)
+            return -QUASI_EBADF;
+
+        if (!handle->write)
+            return -QUASI_EBADF;
+
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        if (handle->IsHostBound())
+        {
+            int host_fd = handle->host_fd;
+            if (hio_status = this->hio_driver.PWrite(host_fd, buf, count, offset); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
+
+        this->vio_driver.SetCtx(nullptr, host_used, handle);
+        vio_status = this->vio_driver.PWrite(fd, buf, count, offset);
+        this->vio_driver.ClearCtx();
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    };
+
+    quasi_ssize_t QFS::Read(const int fd, void *buf, quasi_size_t count)
+    {
+        fd_handle_ptr handle = GetHandle(fd);
+        if (nullptr == handle)
+            return -QUASI_EBADF;
+
+        if (!handle->read)
+            return -QUASI_EBADF;
+
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        if (handle->IsHostBound())
+        {
+            int host_fd = handle->host_fd;
+            if (hio_status = this->hio_driver.Read(host_fd, buf, count); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
+
+        this->vio_driver.SetCtx(nullptr, host_used, handle);
+        vio_status = this->vio_driver.Read(fd, buf, count);
+        this->vio_driver.ClearCtx();
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    }
+
+    quasi_ssize_t QFS::PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset)
+    {
+        fd_handle_ptr handle = GetHandle(fd);
+        if (nullptr == handle)
+            return -QUASI_EBADF;
+
+        if (!handle->read)
+            return -QUASI_EBADF;
+
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        if (handle->IsHostBound())
+        {
+            int host_fd = handle->host_fd;
+            if (hio_status = this->hio_driver.PRead(host_fd, buf, count, offset); hio_status < 0)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+            host_used = true;
+        }
+
+        this->vio_driver.SetCtx(nullptr, host_used, handle);
+        vio_status = this->vio_driver.PRead(fd, buf, count, offset);
+        this->vio_driver.ClearCtx();
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    };
 
     int QFS::MKDir(const fs::path &path, quasi_mode_t mode)
     {
@@ -377,9 +534,9 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.set(&r);
-        vio_status = this->vio_driver.MKDir(path, mode);
-        this->vio_driver.clear();
+        this->vio_driver.SetCtx(&r, host_used, nullptr);
+        vio_status = this->vio_driver.MKDir(r.local_path, mode);
+        this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
             LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
@@ -412,9 +569,9 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.set(&r);
-        status = this->vio_driver.RMDir(path);
-        this->vio_driver.clear();
+        this->vio_driver.SetCtx(&r, host_used, nullptr);
+        status = this->vio_driver.RMDir(r.local_path);
+        this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
             LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
@@ -422,13 +579,101 @@ namespace QuasiFS
         return status;
     }
 
-    // int QFS::Stat(const fs::path &path, quasi_stat_t *stat)
-    // { // stub
-    //     return -QUASI_EINVAL;
-    // }
+    int QFS::Stat(const fs::path &path, quasi_stat_t *statbuf)
+    {
+        Resolved r{};
+        int resolve_status = Resolve(path, r);
 
-    // int QFS::FStat(const int fd, quasi_stat_t *statbuf)
-    // { // stub
-    //     return -QUASI_EINVAL;
-    // }
+        if (nullptr == r.node || resolve_status < 0)
+        {
+            // parent node must exist, file does not
+            return resolve_status;
+        }
+
+        partition_ptr part = r.mountpoint;
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        quasi_stat_t hio_stat;
+        quasi_stat_t vio_stat;
+
+        if (part->IsHostMounted())
+        {
+            fs::path host_path_target{};
+            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); hostpath_status != 0)
+                return hostpath_status;
+
+            if (hio_status = this->hio_driver.Stat(host_path_target, &hio_stat); 0 != hio_status)
+                // hosts operation must succeed in order to continue
+                return hio_status;
+
+            host_used = true;
+        }
+
+        this->vio_driver.SetCtx(&r, host_used, nullptr);
+        vio_status = this->vio_driver.Stat(r.local_path, &vio_stat);
+        this->vio_driver.ClearCtx();
+
+        if (host_used)
+        {
+            vio_stat.st_mode = hio_stat.st_mode;
+            vio_stat.st_size = hio_stat.st_size;
+            vio_stat.st_blksize = hio_stat.st_blksize;
+            vio_stat.st_blocks = hio_stat.st_blocks;
+            vio_stat.st_atim = hio_stat.st_atim;
+            vio_stat.st_mtim = hio_stat.st_mtim;
+            vio_stat.st_ctim = hio_stat.st_ctim;
+        }
+
+        memcpy(statbuf, &vio_stat, sizeof(quasi_stat_t));
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    }
+
+    int QFS::FStat(const int fd, quasi_stat_t *statbuf)
+    {
+        fd_handle_ptr handle = GetHandle(fd);
+        if (nullptr == handle)
+            return -QUASI_EBADF;
+
+        bool host_used = false;
+        int hio_status = 0;
+        int vio_status = 0;
+
+        quasi_stat_t hio_stat;
+        quasi_stat_t vio_stat;
+
+        if (handle->IsHostBound())
+        {
+            int host_fd = handle->host_fd;
+            hio_status = this->hio_driver.FStat(host_fd, &hio_stat);
+            host_used = true;
+        }
+
+        this->vio_driver.SetCtx(nullptr, host_used, handle);
+        vio_status = this->vio_driver.FStat(fd, &vio_stat);
+        this->vio_driver.ClearCtx();
+
+        if (host_used)
+        {
+            vio_stat.st_mode = hio_stat.st_mode;
+            vio_stat.st_size = hio_stat.st_size;
+            vio_stat.st_blksize = hio_stat.st_blksize;
+            vio_stat.st_blocks = hio_stat.st_blocks;
+            vio_stat.st_atim = hio_stat.st_atim;
+            vio_stat.st_mtim = hio_stat.st_mtim;
+            vio_stat.st_ctim = hio_stat.st_ctim;
+        }
+
+        memcpy(statbuf, &vio_stat, sizeof(quasi_stat_t));
+
+        if (host_used && (hio_status != vio_status))
+            LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
+
+        return vio_status;
+    }
 }

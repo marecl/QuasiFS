@@ -28,79 +28,6 @@ namespace QuasiFS
         this->block_devices[this->rootfs] = mount_options;
     }
 
-    void QFS::SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix)
-    {
-        fs::path host_path{};
-        if (0 != part->GetHostPath(host_path))
-        {
-            LogError("Cannot safely resolve host directory for blkdev {}", part->GetBlkId());
-            return; // false
-        }
-
-        // cut out host-root, remainder is Partition path
-        auto host_path_components = std::distance(host_path.begin(), host_path.end()) - 1;
-        auto slice_path = [host_path_components](const fs::path &p)
-        {
-            fs::path out;
-            auto it = p.begin();
-            std::advance(it, host_path_components);
-            for (; it != p.end(); ++it)
-                out /= *it;
-            return out;
-        };
-
-        try
-        {
-            for (auto entry = fs::recursive_directory_iterator(host_path); entry != fs::recursive_directory_iterator(); entry++)
-            {
-                // wcięcie zależne od głębokości
-                fs::path entry_path = entry->path();
-                fs::path pp = "/" / slice_path(entry->path());
-                fs::path parent_path = pp.parent_path();
-                fs::path leaf = pp.filename();
-
-                Resolved r{};
-                part->Resolve(parent_path, r);
-
-                if (nullptr == r.node)
-                {
-                    LogError("Cannot resolve quasi-target for sync: {}", parent_path.string());
-                    continue;
-                }
-
-                dir_ptr parent_dir = r.node->is_dir() ? std::static_pointer_cast<Directory>(r.node) : nullptr;
-                inode_ptr new_inode{};
-
-                if (entry->is_directory())
-                {
-                    new_inode = Directory::Create();
-                    part->mkdir(parent_dir, leaf, std::static_pointer_cast<Directory>(new_inode));
-                }
-                else if (entry->is_regular_file())
-                {
-                    new_inode = RegularFile::Create();
-                    part->touch(parent_dir, leaf, std::static_pointer_cast<RegularFile>(new_inode));
-                }
-                else
-                {
-                    LogError("Unsupported host file type: {}", entry_path.string());
-                    continue;
-                }
-
-                if (0 != this->hio_driver.Stat(entry_path, &new_inode->st))
-                {
-                    LogError("Cannot stat file: {}", entry_path.string());
-                    continue;
-                }
-            }
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "Błąd: " << e.what() << "\n";
-        }
-        return; // true
-    }
-
     int QFS::SyncHost(void)
     {
         for (auto &[part, info] : this->block_devices)
@@ -112,9 +39,77 @@ namespace QuasiFS
         return 0;
     }
 
+    // mount fs at path (target must exist and be directory)
+    int QFS::Mount(const fs::path &path, partition_ptr fs, unsigned int options)
+    {
+        Resolved res{};
+        int status = Resolve(path, res);
+
+        if (0 != status)
+            return status;
+
+        if (!res.node->is_dir())
+            return -QUASI_ENOTDIR;
+
+        if (nullptr != GetPartitionInfo(fs))
+        {
+            LogError("Partition cannot be mounted twice");
+            return -QUASI_EEXIST;
+        }
+
+        if (options & MountOptions::MOUNT_BIND)
+            LogError("Mount --bind not implemented");
+
+        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
+
+        if (dir->mounted_root)
+            return -QUASI_EEXIST;
+
+        dir_ptr fs_root = fs->GetRoot();
+        mount_t fs_options = {
+            .mounted_at = path,
+            .parent = dir,
+            .options = options,
+        };
+
+        dir->mounted_root = fs_root;
+        this->block_devices[fs] = fs_options;
+
+        return 0;
+    }
+
+    // mount fs at path (target must exist and be directory)
+    int QFS::Unmount(const fs::path &path)
+    {
+        Resolved res{};
+        int status = Resolve(path, res);
+
+        if (0 != status)
+            return status;
+
+        partition_ptr part = res.mountpoint;
+        mount_t *part_opts = GetPartitionInfo(part);
+
+        if (nullptr == part_opts)
+            return -QUASI_EINVAL;
+
+        dir_ptr dir = std::static_pointer_cast<Directory>(part_opts->parent);
+
+        if (dir != res.parent)
+            LogError("XDXDXD");
+
+        if (nullptr == dir->mounted_root)
+            // mounted but rootdir disappeared O.o
+            return -QUASI_EINVAL;
+
+        dir->mounted_root = nullptr;
+        this->block_devices.erase(part);
+
+        return 0;
+    }
+
     int QFS::Resolve(const fs::path &path, Resolved &r)
     {
-        std::string XDXDXD = path;
         if (path.empty())
             return -QUASI_EINVAL;
         if (path.is_relative())
@@ -206,73 +201,77 @@ namespace QuasiFS
         return 0;
     }
 
-    // mount fs at path (target must exist and be directory)
-    int QFS::Mount(const fs::path &path, partition_ptr fs, unsigned int options)
+    void QFS::SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix)
     {
-        Resolved res{};
-        int status = Resolve(path, res);
-
-        if (0 != status)
-            return status;
-
-        if (!res.node->is_dir())
-            return -QUASI_ENOTDIR;
-
-        if (nullptr != GetPartitionInfo(fs))
+        fs::path host_path{};
+        if (0 != part->GetHostPath(host_path))
         {
-            LogError("Partition cannot be mounted twice");
-            return -QUASI_EEXIST;
+            LogError("Cannot safely resolve host directory for blkdev {}", part->GetBlkId());
+            return; // false
         }
 
-        if (options & MountOptions::MOUNT_BIND)
-            LogError("Mount --bind not implemented");
-
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
-
-        if (dir->mounted_root)
-            return -QUASI_EEXIST;
-
-        dir_ptr fs_root = fs->GetRoot();
-        mount_t fs_options = {
-            .mounted_at = path,
-            .parent = dir,
-            .options = options,
+        // cut out host-root, remainder is Partition path
+        auto host_path_components = std::distance(host_path.begin(), host_path.end()) - 1;
+        auto slice_path = [host_path_components](const fs::path &p)
+        {
+            fs::path out;
+            auto it = p.begin();
+            std::advance(it, host_path_components);
+            for (; it != p.end(); ++it)
+                out /= *it;
+            return out;
         };
 
-        dir->mounted_root = fs_root;
-        this->block_devices[fs] = fs_options;
+        try
+        {
+            for (auto entry = fs::recursive_directory_iterator(host_path); entry != fs::recursive_directory_iterator(); entry++)
+            {
+                // wcięcie zależne od głębokości
+                fs::path entry_path = entry->path();
+                fs::path pp = "/" / slice_path(entry->path());
+                fs::path parent_path = pp.parent_path();
+                fs::path leaf = pp.filename();
 
-        return 0;
-    }
+                Resolved r{};
+                part->Resolve(parent_path, r);
 
-    // mount fs at path (target must exist and be directory)
-    int QFS::Unmount(const fs::path &path)
-    {
-        Resolved res{};
-        int status = Resolve(path, res);
+                if (nullptr == r.node)
+                {
+                    LogError("Cannot resolve quasi-target for sync: {}", parent_path.string());
+                    continue;
+                }
 
-        if (0 != status)
-            return status;
+                dir_ptr parent_dir = r.node->is_dir() ? std::static_pointer_cast<Directory>(r.node) : nullptr;
+                inode_ptr new_inode{};
 
-        partition_ptr part = res.mountpoint;
-        mount_t *part_opts = GetPartitionInfo(part);
+                if (entry->is_directory())
+                {
+                    new_inode = Directory::Create();
+                    part->mkdir(parent_dir, leaf, std::static_pointer_cast<Directory>(new_inode));
+                }
+                else if (entry->is_regular_file())
+                {
+                    new_inode = RegularFile::Create();
+                    part->touch(parent_dir, leaf, std::static_pointer_cast<RegularFile>(new_inode));
+                }
+                else
+                {
+                    LogError("Unsupported host file type: {}", entry_path.string());
+                    continue;
+                }
 
-        if (nullptr == part_opts)
-            return -QUASI_EINVAL;
-
-        dir_ptr dir = std::static_pointer_cast<Directory>(part_opts->parent);
-
-        if (dir != res.parent)
-            LogError("XDXDXD");
-
-        if (nullptr == dir->mounted_root)
-            // mounted but rootdir disappeared O.o
-            return -QUASI_EINVAL;
-
-        dir->mounted_root = nullptr;
-        this->block_devices.erase(part);
-
-        return 0;
+                if (0 != this->hio_driver.Stat(entry_path, &new_inode->st))
+                {
+                    LogError("Cannot stat file: {}", entry_path.string());
+                    continue;
+                }
+            }
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Błąd: " << e.what() << "\n";
+        }
+        return; // true
     }
 
     int QFS::GetFreeHandleNo()
@@ -287,14 +286,12 @@ namespace QuasiFS
         return open_fd_size;
     }
 
-    // partition_ptr QFS::GetPartitionByBlockdev(uint64_t blkid)
-    // {
-    //     auto target_blkdev = this->block_devices.find(blkid);
-    //     // already mounted
-    //     if (target_blkdev == this->block_devices.end())
-    //         return nullptr;
-    //     return target_blkdev->second;
-    // }
+    fd_handle_ptr QFS::GetHandle(int fd)
+    {
+        if (fd < 0 || fd >= this->open_fd.size())
+            return nullptr;
+        return this->open_fd.at(fd);
+    }
 
     mount_t *QFS::GetPartitionInfo(partition_ptr part)
     {
@@ -325,4 +322,13 @@ namespace QuasiFS
         return nullptr;
     }
 
+    int QFS::IsPartitionRO(partition_ptr part)
+    {
+        mount_t *part_info = GetPartitionInfo(part);
+        if (nullptr == part_info)
+            return -QUASI_ENODEV;
+        if (part_info->options & MountOptions::MOUNT_RW)
+            return 0;
+        return 1;
+    }
 };

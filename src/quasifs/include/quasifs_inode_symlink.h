@@ -19,8 +19,8 @@ namespace QuasiFS
             return std::make_shared<Symlink>(target);
         }
 
+        // symlinked path
         fs::path follow(void);
-        quasi_stat_t getattr(inode_ptr inode);
     };
 
 }

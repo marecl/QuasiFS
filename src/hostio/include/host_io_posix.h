@@ -21,8 +21,9 @@ namespace HostIODriver
 
     public:
         //
-        // Conversion between native and Quasi (arbitrary) values
+        // Conversion helpers
         //
+
         static constexpr int ToPOSIXSeekOrigin(QuasiFS::SeekOrigin origin)
         {
             switch (origin)
@@ -57,7 +58,6 @@ namespace HostIODriver
         // POSIX Functions
         //
 
-        // remember to change mode back to parameter
         int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755) override;
         int Creat(const fs::path &path, quasi_mode_t mode = 0755) override;
         int Close(const int fd) override;

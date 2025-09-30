@@ -78,21 +78,21 @@ namespace HostIODriver
     {
         errno = 0;
         int status = truncate(path.c_str(), size);
-        return status == 0 ? status : -errno;
+        return status >= 0 ? status : -errno;
     }
 
     int HostIO_POSIX::FTruncate(const int fd, quasi_size_t size)
     {
         errno = 0;
         int status = ftruncate(fd, size);
-        return status == 0 ? status : -errno;
+        return status >= 0 ? status : -errno;
     }
 
     quasi_off_t HostIO_POSIX::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
     {
         errno = 0;
         int status = lseek(fd, offset, ToPOSIXSeekOrigin(origin));
-        return status == 0 ? status : -errno;
+        return status >= 0 ? status : -errno;
     }
 
     quasi_ssize_t HostIO_POSIX::Tell(const int fd)

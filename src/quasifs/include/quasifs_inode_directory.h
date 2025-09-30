@@ -24,14 +24,17 @@ namespace QuasiFS
             return std::make_shared<Directory>();
         }
 
+        // Insert [child] directory with [name]
         int mkdir(const std::string &name, dir_ptr child);
-        // add rmdir
 
+        // Find an element with [name]
         inode_ptr lookup(const std::string &name);
 
+        // Add hardlink to [child] with [name]
         int link(const std::string &name, inode_ptr child);
+        // Remove hardlink to [name]
         int unlink(const std::string &name);
-
+        // list entries
         std::vector<std::string> list();
         quasi_stat_t getattr();
     };

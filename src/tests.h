@@ -115,10 +115,23 @@ void TestSymlinkCursed(QFS &qfs);
 // Files (I/O)
 void TestFileOpen(QFS &qfs);
 void TestFileOps(QFS &qfs);
+void TestFileSeek(QFS &qfs);
 
 // Directories (I/O)
 void TestDirOpen(QFS &qfs);
 void TestDirOps(QFS &qfs);
+
+// Stat
+void TestStat(QFS &qfs)
+{
+    qfs.MKDir("/mount");
+
+    partition_ptr part = Partition::Create("", MountOptions::MOUNT_RW);
+    qfs.Mount("/mount", part);
+
+    qfs.Creat("/mount/file");
+}
+void TestHostStat(QFS &qfs) UNIMPLEMENTED();
 
 void Test(QFS &qfs)
 {
@@ -138,23 +151,28 @@ void Test(QFS &qfs)
     TestMountFileRetention(qfs);
     TestMountRO(qfs);
 
-    // // Links
-    // TestStLinkFile(qfs);
-    // TestStLinkDir(qfs);
-    // TestStLinkMixed(qfs);
+    // Links
+    TestStLinkFile(qfs);
+    TestStLinkDir(qfs);
+    TestStLinkMixed(qfs);
 
-    // // Symlinks
-    // TestSymlinkFile(qfs);
-    // TestSymlinkDir(qfs);
-    // TestSymlinkCursed(qfs);
+    // Symlinks
+    TestSymlinkFile(qfs);
+    TestSymlinkDir(qfs);
+    TestSymlinkCursed(qfs);
 
-    // // Files (I/O)
-    // TestFileOpen(qfs);
-    // TestFileOps(qfs);
+    // Files (I/O)
+    TestFileOpen(qfs);
+    TestFileOps(qfs);
+    TestFileSeek(qfs);
 
-    // // Directories (I/O)
-    // TestDirOpen(qfs);
-    // TestDirOps(qfs);
+    // Directories (I/O)
+    TestDirOpen(qfs);
+    TestDirOps(qfs);
+
+    // Stat
+    TestStat(qfs);
+    TestHostStat(qfs);
 
     Log("");
     Log("Tests complete");
@@ -402,8 +420,7 @@ void TestMountFileRetention(QFS &qfs)
     Log("\tPre-mount file fileno: {}", ffileno);
     Log("\tPre-mount dir fileno: {}", dfileno);
 
-
-    if (int status = qfs.Mount("/mount",part); 0 == status)
+    if (int status = qfs.Mount("/mount", part); 0 == status)
         LogSuccess("Mounted /mount");
     else
         LogError("Can't mount /mount : {}", status);
@@ -869,7 +886,113 @@ void TestFileOpen(QFS &qfs)
         LogError("O_RDONLY | O_TRUNC, existing file: {}", status);
 }
 
-void TestFileOps(QFS &qfs) { UNIMPLEMENTED(); }
+void TestFileOps(QFS &qfs)
+{
+    LogTest("File operations");
+
+    int fd = qfs.Creat("/rwtest");
+    Resolved r;
+    qfs.Resolve("/rwtest", r);
+
+    if (r.node == nullptr)
+    {
+        LogError("Didn't create /rwtest file");
+        return;
+    }
+    auto size = &r.node->st.st_size;
+    char buffer[1024];
+
+    //
+
+    const char *teststr = "First sentence. Second sentence.";
+    const char *overw = "OVERWRITTEN";
+    auto teststr_len = strlen(teststr);
+    auto overw_len = strlen(overw);
+
+    if (int bw = qfs.Write(fd, teststr, teststr_len); bw == teststr_len)
+        LogSuccess("Written test string 1 to file.");
+    else
+        LogError("Didn't write test string 1: {} out of {}", bw, teststr_len);
+    if (int bw = qfs.PWrite(fd, overw, overw_len, teststr_len - 5); bw == overw_len)
+        LogSuccess("Written test string 1 to file.");
+    else
+        LogError("Didn't write test string 1: {} out of {}", bw, teststr_len);
+
+    qfs.Close(fd);
+
+    // Readback
+
+    fd = qfs.Open("/rwtest", O_RDWR);
+    memset(buffer, 0, 1024);
+    if (int br = qfs.Read(fd, buffer, 1024); br == teststr_len + overw_len - 5)
+        LogSuccess("Read test string:\n[START]{}[EOF]", buffer);
+    else
+        LogError("Didn't read test string 1: {} out of {}", br, teststr_len);
+
+    if (int status = memcmp(buffer, teststr, teststr_len - 5); status != 0)
+    {
+        LogError("Invalid readback - first string");
+    }
+    if (int status = memcmp(buffer + teststr_len - 5, overw, overw_len); status != 0)
+    {
+        LogError("Invalid readback - overwriting string");
+    }
+
+    if (int status = qfs.FTruncate(fd, 15); status == 0 && *size == 15)
+        LogSuccess("File truncated to {} bytes", *size);
+    else
+        LogError("Can't truncate: supposed to be 15, returned {}, size is {}", status, *size);
+
+    qfs.Close(fd);
+}
+
+void TestFileSeek(QFS &qfs)
+{
+    LogTest("Seek");
+    const char *seekstr = "ori+00.cur+36.end-49.filler.filler.filler.cur-13.ori+28.";
+    int fd = qfs.Open("/seektest", O_CREAT | O_RDWR);
+    qfs.Write(fd, seekstr, strlen(seekstr));
+
+    char buf[32];
+
+    qfs.LSeek(fd, 0, SeekOrigin::ORIGIN);
+    if (6 != qfs.Read(fd, buf, 6))
+        LogError("Can't read data for ORIGIN+00");
+    TEST(strncmp(buf, "ori+00", 6) == 0, "Success: {}", "Fail: {}", "ORIGIN+00");
+
+    qfs.LSeek(fd, 8, SeekOrigin::CURRENT);
+    if (6 != qfs.Read(fd, buf, 6))
+        LogError("Can't read data for CURRENT+08");
+    TEST(strncmp(buf, "end-49", 6) == 0, "Success: {}", "Fail: {}", "CURRENT+08");
+
+    qfs.LSeek(fd, -49, SeekOrigin::END);
+    if (6 != qfs.Read(fd, buf, 6))
+        LogError("Can't read data for END-49");
+    TEST(strncmp(buf, "cur+36", 6) == 0, "Success: {}", "Fail: {}", "END-49");
+
+    qfs.LSeek(fd, 36, SeekOrigin::CURRENT);
+    if (6 != qfs.Read(fd, buf, 6))
+        LogError("Can't read data for CURRENT+36");
+    TEST(strncmp(buf, "ori+28", 6) == 0, "Success: {}", "Fail: {}", "CURRENT+36");
+
+    qfs.LSeek(fd, -13, SeekOrigin::CURRENT);
+    if (6 != qfs.Read(fd, buf, 6))
+        LogError("Can't read data for CURRENT-10");
+    TEST(strncmp(buf, "cur-13", 6) == 0, "Success: {}", "Fail: {}", "CURRENT-13");
+
+    // no change to ptr (-100)
+    TEST(int status = qfs.LSeek(fd, -100, SeekOrigin::ORIGIN); status == -QUASI_EINVAL, "EINVAL ({}) {}", "{} {}", status, "on ORIGIN -OOB");
+    // 100
+    TEST(int status = qfs.LSeek(fd, 100, SeekOrigin::ORIGIN); status == 100, "no error ({}) {}", "{} {}", status, "on ORIGIN +OOB");
+    // no change to ptr (-100)
+    TEST(int status = qfs.LSeek(fd, -200, SeekOrigin::CURRENT); status == -QUASI_EINVAL, "EINVAL ({}) {}", "{} {}", status, "on CURRENT -OOB");
+    // 200
+    TEST(int status = qfs.LSeek(fd, 100, SeekOrigin::CURRENT); status == 200, "no error ({}) {}", "{} {}", status, "on CURRENT +OOB");
+    // no change to ptr (200)
+    TEST(int status = qfs.LSeek(fd, -100, SeekOrigin::END); status == -QUASI_EINVAL, "EINVAL ({}) {}", "{} {}", status, "on END -OOB");
+    // 100 + file size
+    TEST(int status = qfs.LSeek(fd, 100, SeekOrigin::END); status == 100 + strlen(seekstr), "no error ({}) {}", "{} {}", status, "on END +OOB");
+}
 
 //
 // Directories (I/O)
