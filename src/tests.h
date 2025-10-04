@@ -81,26 +81,7 @@ void TestMkRmdir(QFS &qfs);
 // Mounts (partitions)
 void TestMount(QFS &qfs);
 void TestMountFileRetention(QFS &qfs);
-void TestMountRO(QFS &qfs)
-{
-    partition_ptr ropart = Partition::Create();
-
-    qfs.MKDir("/ro");
-    if (int mount_status = qfs.Mount("/ro", ropart, MountOptions::MOUNT_NOOPT); mount_status == 0)
-        LogSuccess("Mounted /ro as read-only partition");
-    else
-        LogError("Can't mount /ro : {}", mount_status);
-
-    if (int fd = qfs.Creat("/ro/bad"); fd == -QUASI_EROFS)
-        LogSuccess("Can't create a file in RO partition");
-    else
-    {
-        LogError("Unexpected return from creat(): {}", fd);
-        Resolved r;
-        if (int resolve_status = qfs.Resolve("/ro/bad", r); resolve_status == 0)
-            LogError("Created a file in RO partition");
-    }
-}
+void TestMountRO(QFS &qfs);
 
 // Links
 void TestStLinkFile(QFS &qfs);
@@ -235,8 +216,21 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("Can't resolve: {}", status);
 
+    if (int status = qfs.Resolve("/testdir", r); status == 0)
+        LogSuccess("Resolved /testdir");
+    else
+        LogError("Can't resolve: {}", status);
+
+    if (int status = qfs.Resolve("/testdir/", r); status == 0)
+        LogSuccess("Resolved /testdir/");
+    else
+        LogError("Can't resolve /testdir/ : {}", status);
+
     if (r.parent != qfs.GetRoot())
         LogError("Wrong parent");
+    auto q = r.parent;
+    auto qw = r.node;
+    auto qwe = qfs.GetRoot();
 
     if (int status = qfs.RMDir(path); status == 0)
         LogSuccess("rmdir'd");
@@ -285,7 +279,6 @@ void TestMount(QFS &qfs)
     if (nullptr == part)
     {
         LogError("Can't create partition object");
-        return;
     }
 
     Resolved r{};
@@ -298,7 +291,6 @@ void TestMount(QFS &qfs)
     else
     {
         LogError("Mountpoint dir not created: {}", status);
-        return;
     }
 
     if (nullptr == r.parent)
@@ -326,7 +318,6 @@ void TestMount(QFS &qfs)
     if (nullptr == r.node)
     {
         LogError("Post-mount dir not found");
-        return;
     }
 
     if (r.mountpoint != part)
@@ -404,7 +395,6 @@ void TestMountFileRetention(QFS &qfs)
     else
     {
         LogError("Test file not created: {}", status_file);
-        return;
     }
 
     if (int status_dir = qfs.Resolve("/mount/testdir", rdir); 0 == status_dir)
@@ -412,7 +402,6 @@ void TestMountFileRetention(QFS &qfs)
     else
     {
         LogError("Test directory not created: {}", status_dir);
-        return;
     }
 
     auto ffileno = rfile.node->GetFileno();
@@ -420,7 +409,7 @@ void TestMountFileRetention(QFS &qfs)
     Log("\tPre-mount file fileno: {}", ffileno);
     Log("\tPre-mount dir fileno: {}", dfileno);
 
-    if (int status = qfs.Mount("/mount", part); 0 == status)
+    if (int status = qfs.Mount("/mount", part, MountOptions::MOUNT_RW); 0 == status)
         LogSuccess("Mounted /mount");
     else
         LogError("Can't mount /mount : {}", status);
@@ -428,31 +417,27 @@ void TestMountFileRetention(QFS &qfs)
     if (int status_file = qfs.Resolve("/mount/testfile", rfile); 0 == status_file && -QUASI_ENOENT == status_file)
     {
         LogError("Pre-mount file preserved (if 0), or error (if not ENOENT): {}", status_file);
-        return;
     }
     if (int status_dir = qfs.Resolve("/mount/testdir", rdir); 0 == status_dir && -QUASI_ENOENT == status_dir)
     {
         LogError("Pre-mount directory preserved (if 0), or error (if not ENOENT): {}", status_dir);
-        return;
     }
 
     qfs.Creat("/mount/testfile_mnt");
     qfs.MKDir("/mount/testdir_mnt");
 
-    if (int status_file = qfs.Resolve("/mount/testfile_mnt", rfile); -QUASI_ENOENT != status_file)
+    if (int status_file = qfs.Resolve("/mount/testfile_mnt", rfile); 0 == status_file)
         LogSuccess("Test file created (mount)");
     else
     {
         LogError("After-mount file not created: {}", status_file);
-        return;
     }
 
-    if (int status_dir = qfs.Resolve("/mount/testdir_mnt", rdir); -QUASI_ENOENT != status_dir)
+    if (int status_dir = qfs.Resolve("/mount/testdir_mnt", rdir); 0 == status_dir)
         LogSuccess("Test dir created (mount)");
     else
     {
         LogError("After-mount directory not created: {}", status_dir);
-        return;
     }
 
     auto ffileno_mnt = rfile.node->GetFileno();
@@ -497,6 +482,60 @@ void TestMountFileRetention(QFS &qfs)
         LogSuccess("Mountpoint dir doesn't exist");
     else
         LogError("Mountpoint directory persisted");
+}
+
+void TestMountRO(QFS &qfs)
+{
+    partition_ptr ropart = Partition::Create();
+    const char *rostr = "RO PREEXISTING CONTENT";
+    auto rostr_len = strlen(rostr);
+
+    qfs.MKDir("/ro");
+
+    if (int mount_status = qfs.Mount("/ro", ropart, MountOptions::MOUNT_RW); mount_status == 0)
+        LogSuccess("Mounted /ro as RW partition");
+    else
+        LogError("Can't mount /ro as RW: {}", mount_status);
+
+    qfs.MKDir("/ro/roo");
+
+    int existing_fd = qfs.Creat("/ro/exist");
+    if (int bw = qfs.Write(existing_fd, rostr, rostr_len); bw != rostr_len)
+        LogError("Can't write test data: {} out of {} written", bw, rostr_len);
+    qfs.Close(existing_fd);
+
+    if (int mount_status = qfs.Mount("/ro", ropart, MountOptions::MOUNT_NOOPT | MountOptions::MOUNT_REMOUNT); mount_status == 0)
+        LogSuccess("Mounted /ro as read-only partition");
+    else
+        LogError("Can't mount /ro as RO: {}", mount_status);
+
+    if (int fd = qfs.Creat("/ro/bad"); fd == -QUASI_EROFS)
+        LogSuccess("Can't create a file in RO partition");
+    else
+    {
+        LogError("Unexpected return from creat(): {}", fd);
+        Resolved r;
+        if (int resolve_status = qfs.Resolve("/ro/bad", r); resolve_status == 0)
+            LogError("Created a file in RO partition");
+    }
+
+    int fd = qfs.Open("/ro/exist", 0);
+    if (fd >= 0)
+        LogSuccess("Preexisting file open. fd={}", fd);
+    else
+        LogError("Can't open file. Error: {}", fd);
+    char buffer[128]{0};
+    int rd = qfs.Read(fd, buffer, 128);
+
+    if (rd >= 0)
+        LogSuccess("Success: {} bytes read from preexisting file", rd);
+    else
+        LogError("Error: {} bytes read from preexisting file", rd);
+
+    if (memcmp(rostr, buffer, rd) == 0)
+        LogSuccess("Contents verified successfully");
+    else
+        LogError("Failed to verify contents");
 }
 
 //
@@ -677,8 +716,6 @@ void TestSymlinkFile(QFS &qfs)
         LogSuccess("Same directory, down->up works");
     else
         LogError("Same directory down->up failed: Resolve returned {}", resolve_status);
-
-    return;
 }
 
 void TestSymlinkDir(QFS &qfs)
@@ -732,8 +769,6 @@ void TestSymlinkDir(QFS &qfs)
         LogSuccess("Same directory, down->up works");
     else
         LogError("Same directory down->up failed: Resolve returned {}", resolve_status);
-
-    return;
 }
 
 void TestSymlinkCursed(QFS &qfs)
@@ -808,14 +843,12 @@ void TestSymlinkCursed(QFS &qfs)
     if (-QUASI_ENOENT == resolve_status)
         LogSuccess("Dangling symlink returns ENOENT");
     else
-        LogError("Resolving dangling symlink returns wrong error: ", resolve_status);
+        LogError("Resolving dangling symlink returns wrong error: {}", resolve_status);
 
     qfs.MKDir("/dir1");
     qfs.MKDir("/dir2");
     qfs.Creat("/dir2/XD");
     qfs.LinkSymbolic("/dir2", "/dir1/missing");
-
-    Log("These 3 tests will fail, because this feature is unimplemented yet");
 
     resolve_status = qfs.Resolve("/dir1/missing/XD", r);
     if (0 == resolve_status)
@@ -834,6 +867,20 @@ void TestSymlinkCursed(QFS &qfs)
         LogSuccess("Dangling symlink inside a tree returns ENOENT");
     else
         LogError("Resolving dangling symlink inside a tree returns wrong error: {}", resolve_status);
+
+    //
+    qfs.LinkSymbolic("/dir2/XD", "/unlinked_link");
+    if (0 != qfs.Unlink("/unlinked_link"))
+    {
+        LogError("Didn't unlink a symlink pointing at a file");
+    }
+
+    resolve_status = qfs.Resolve("/dir2/XD", r);
+
+    if (0 == resolve_status)
+        LogSuccess("Unlinking a symlink didn't touch linked file");
+    else
+        LogError("Unlinking a symlink removed the file it pointed to: {}", resolve_status);
 }
 
 //
@@ -852,7 +899,7 @@ void TestFileOpen(QFS &qfs)
         qfs.Close(status);
     }
     else
-        LogError("O_READ, nonexistent file: {}", status);
+        LogError("O_READ, nonexistent file with trailing /: {}", status);
 
     if (int status = qfs.Open("/file_open", O_CREAT); 0 <= status)
     {
@@ -866,6 +913,14 @@ void TestFileOpen(QFS &qfs)
     if (-QUASI_ENOENT == qfs.Resolve("/file_open", r))
         LogError("O_CREAT didn't create the file");
     //
+
+    if (int status = qfs.Open("/file_open/", 0); -QUASI_ENOTDIR == status)
+    {
+        LogSuccess("nonexistent file with trailing /, O_READ");
+        qfs.Close(status);
+    }
+    else
+        LogError("O_READ, nonexistent file with trailing /: {}", status);
 
     if (int status = qfs.Open("/file_open", O_RDWR); 0 <= status)
     {
@@ -897,7 +952,6 @@ void TestFileOps(QFS &qfs)
     if (r.node == nullptr)
     {
         LogError("Didn't create /rwtest file");
-        return;
     }
     auto size = &r.node->st.st_size;
     char buffer[1024];

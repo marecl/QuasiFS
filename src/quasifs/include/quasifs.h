@@ -46,12 +46,12 @@ namespace QuasiFS
         dir_ptr GetRoot() { return this->root; }
         // Return root partition
         partition_ptr GetRootFS() { return this->rootfs; }
-   
+
         // mount fs at path (target must exist and be directory)
         int Mount(const fs::path &path, partition_ptr fs, unsigned int options = MountOptions::MOUNT_NOOPT);
         // mount fs at path (target must exist and be directory)
         int Unmount(const fs::path &path);
-        
+
         /**
          * Resolve path
          * This is kind of a headache, so TLDR:
@@ -67,13 +67,10 @@ namespace QuasiFS
          *      * Inode that's mounted (always a dir)
          *  3. Mountpoint is:
          *      * Partition owning the inode
-         *      * Never null (if ENOENT, points at last valid partition)
+         *      * Null when partition is not found
          *  4. Local path is:
-         *      * Full path in the beginning
-         *      * Trimmed from the front when entering partition
-         *          (absolute in regards to root of the partition)
-         *      * Updated when symlink is encountered
-         *      * Used only for: path resolution, extracting host-bound path
+         *      * Always set by partition's resolve
+         *      * Every leaf that was encountered on resolution step
          *  5. Leaf is:
          *      * Never empty
          *      * Name of the last element
@@ -87,13 +84,12 @@ namespace QuasiFS
          */
         int Resolve(const fs::path &path, Resolved &r);
 
-
         //
         // Inherited from HostIOBase
         // Raw file operations
         // man(2)
         //
-        
+
         int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755);
         int Creat(const fs::path &path, quasi_mode_t mode = 0755);
         int Close(const int fd);
@@ -120,12 +116,11 @@ namespace QuasiFS
         // Additional binds
         //
 
-        quasi_ssize_t getdirectorysize(const fs::path &path) { return -QUASI_EINVAL; };
-        int IsOpen(const int fd) noexcept { return -QUASI_EINVAL; };
-        int SetSize(const int fd, uint64_t size) noexcept { return -QUASI_EINVAL; };
-        quasi_ssize_t GetSize(const int fd) noexcept { return -QUASI_EINVAL; };
-        // Not a port, used by 2-3 functions that *never* check for errors
-        quasi_ssize_t GetDirectorySize(const fs::path &path) noexcept { return -QUASI_EINVAL; };
+        bool IsOpen(const int fd) noexcept;
+        int SetSize(const int fd, uint64_t size) noexcept;
+        quasi_ssize_t GetSize(const int fd) noexcept;
+        // Not a port, used by 2-3 functions that ;
+        quasi_ssize_t GetDirectorySize(const fs::path &path) noexcept;
 
         //
         // C++ ports with both except/noexcept

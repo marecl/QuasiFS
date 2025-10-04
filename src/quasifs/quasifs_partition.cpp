@@ -49,8 +49,6 @@ namespace QuasiFS
         }
         output_path = host_path_target_sanitized;
         // Log("Resolving local {} to {}", local_path.string(), host_path_target_sanitized.string());
-        // if (local_path.string().size() >= 256)
-        //     return -QUASI_ENAMETOOLONG;
         return 0;
     }
 
@@ -63,42 +61,75 @@ namespace QuasiFS
             return -QUASI_EBADF;
 
         r.mountpoint = shared_from_this();
+        r.local_path = "/";
         r.parent = this->root;
         r.node = this->root;
         r.leaf = "";
 
-        // these hold up between iterations, but setting them can be ignored if the function is about to returnI
+        // these hold up between iterations, but setting them can be ignored if the function is about to return
         dir_ptr parent = r.parent;
         inode_ptr current = r.node;
 
         bool is_final = false;
 
-        std::string pathstr = path.string();
+        //  Log("Partition resolving path [{}]", path.string());
         for (auto part = path.begin(); part != path.end(); part++)
         {
-
-            std::string partstr = part->string();
-            if (part->empty() || *part == "/")
-                continue;
+            //    Log("\t\t--> [{}]", part->string());
 
             is_final = std::next(part) == path.end();
+            //      if (is_final)
+            //          Log("\t\t-> final piece");
 
-            // non-final element can't be anything other than a dir or link
+            if (*part == "/")
+            {
+                r.local_path = "/";
+                r.parent = r.parent;
+                r.node = r.node;
+                r.leaf = "/";
+                continue;
+            }
+
+            // empty means trailing / which is interpreted only when using dirs or symlinks
+            if (part->empty())
+            {
+                if (!is_final)
+                    // simething went wrong
+                    throw 666;
+
+                if (!(current->is_link() || current->is_dir()))
+                    // trailing slash after a file
+                    return -QUASI_ENOTDIR;
+
+                return 0;
+            }
+
             if (!(current->is_link() || current->is_dir()) && !is_final)
+            {
+                // path elements must be a dir or a symlink
                 return -QUASI_ENOTDIR;
+            }
+
+            //
 
             if (current->is_dir())
             {
                 if (!current->CanRead())
+                {
+                    //           Log("eaccess");
                     return -QUASI_EACCES;
+                }
 
                 dir_ptr dir = std::static_pointer_cast<Directory>(current);
                 parent = dir;
-                current = dir->lookup(partstr);
+                current = dir->lookup(*part);
 
                 r.parent = parent;
                 r.node = current;
-                r.leaf = partstr;
+                r.leaf = *part;
+                std::string qwe = *part;
+
+                r.local_path /= *part;
             }
 
             // file not found in current directory, ENOENT
@@ -112,9 +143,13 @@ namespace QuasiFS
                 {
                     r.node = nullptr;
                     r.parent = nullptr;
+                    //        Log("enoent as fuck");
                 }
+                //      Log("enoent");
                 return -QUASI_ENOENT;
             }
+
+            //
 
             /**
              * WARNING
@@ -128,26 +163,29 @@ namespace QuasiFS
             // quick lookahead if this directory is a mountpoint
             if (current->is_dir())
             {
-                dir_ptr dir = std::static_pointer_cast<Directory>(current);
-                if (dir->mounted_root != nullptr)
+                dir_ptr current_dir = std::static_pointer_cast<Directory>(current);
+
+                if (current_dir->mounted_root != nullptr)
                 {
+                    //        Log("\t\t--> mountpoint detected");
                     // if it's a mountpoint, the preceeding path is invalid from target partition's POV
                     // we take remainder of the path (current leaf name belongs to upstream) and leave everything
                     // AFTER host's path
                     // since QFS holds mountpoint meta, its it's job to resolve mounted root directory.
-                    fs::path remainder = "";
+                    fs::path remainder = "/";
                     for (auto p = std::next(part); p != path.end(); p++)
                         remainder /= *p;
-                    // this fixed some edge cases where path was becoming relative o.o
-                    path = remainder.lexically_relative("/");
-
-                    r.parent = dir; // no point, unused in this context
-                    r.node = dir->mounted_root;
-                    r.leaf = partstr;
+                    path = remainder;
+                    // Log("\t\t-> mountpoint: Modifying path to {}", path.string());
+                    r.parent = current_dir; // no point, unused in this context
+                    r.node = current_dir->mounted_root;
+                    r.leaf = *part;
 
                     return 0;
                 }
             }
+
+            //
 
             if (current->is_link())
             {
@@ -156,10 +194,11 @@ namespace QuasiFS
                 for (auto p = std::next(part); p != path.end(); p++)
                     remainder /= *p;
                 path = remainder;
+                //     Log("\t-> symlink: Remaining path: [{}]", path.string());
 
                 r.parent = parent;
                 r.node = current;
-                r.leaf = partstr;
+                r.leaf = *part;
                 return 0;
             }
         }
@@ -336,5 +375,4 @@ namespace QuasiFS
         auto ret = inode_table.find(fileno);
         return (ret == inode_table.end()) ? nullptr : ret->second;
     }
-
 };

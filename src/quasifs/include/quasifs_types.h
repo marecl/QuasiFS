@@ -157,7 +157,7 @@ namespace QuasiFS
     {
         // path the partition
         fs::path mounted_at;
-        dir_ptr parent;
+        dir_ptr parentdir;
         unsigned int options;
     } mount_t;
 }

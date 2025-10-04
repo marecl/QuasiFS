@@ -43,7 +43,7 @@ namespace QuasiFS
         // Host is (usually) more lenient
         //
 
-        if (IsPartitionRO(part))
+        if ((request_write || request_append) && IsPartitionRO(part))
             return -QUASI_EROFS;
 
         // if it doesn't exist, check the parent
@@ -88,7 +88,7 @@ namespace QuasiFS
         // if it didn't, VIO will update this member
         handle->node = r.node;
         // virtual fd is stored in open_fd map
-        handle->host_fd = hio_status;
+        handle->host_fd = host_used ? hio_status : -1;
         handle->read = request_read;
         handle->write = request_write;
         handle->append = request_append;
@@ -146,6 +146,9 @@ namespace QuasiFS
         partition_ptr src_part = src_res.mountpoint;
         partition_ptr dst_part = dst_res.mountpoint;
 
+        if (IsPartitionRO(dst_part))
+            return -QUASI_EROFS;
+
         bool host_used = false;
         int hio_status = 0;
         int vio_status = 0;
@@ -154,6 +157,10 @@ namespace QuasiFS
         // mixed source/destination will need a bit more effort
         if (src_part->IsHostMounted() && dst_part->IsHostMounted())
         {
+            // if target partition doesn't exist or is not mounted, we can't resolve host path
+            if (nullptr == src_part)
+                return -QUASI_ENOENT;
+
             fs::path host_path_src{};
             fs::path host_path_dst{};
 
@@ -166,6 +173,11 @@ namespace QuasiFS
                 // hosts operation must succeed in order to continue
                 return hio_status;
             host_used = true;
+        }
+        else if (dst_part->IsHostMounted() ^ src_part->IsHostMounted())
+        {
+            LogError("Symlinks can be only created if both source and destination are host-bound");
+            return -QUASI_ENOSYS;
         }
 
         this->vio_driver.SetCtx(&dst_res, host_used, nullptr);
@@ -195,25 +207,35 @@ namespace QuasiFS
         if (src_res.mountpoint != dst_res.mountpoint)
             return -QUASI_EXDEV;
 
-        partition_ptr part = src_res.mountpoint;
+        partition_ptr src_part = src_res.mountpoint;
+        partition_ptr dst_part = dst_res.mountpoint;
+
+        if (IsPartitionRO(dst_part))
+            return -QUASI_EROFS;
+
         bool host_used = false;
         int hio_status = 0;
         int vio_status = 0;
 
-        if (part->IsHostMounted())
+        if (dst_part->IsHostMounted() && src_part->IsHostMounted())
         {
             fs::path host_path_src{};
             fs::path host_path_dst{};
 
-            if (int hostpath_status = part->GetHostPath(host_path_src, src_res.local_path); hostpath_status != 0)
+            if (int hostpath_status = src_part->GetHostPath(host_path_src, src_res.local_path); hostpath_status != 0)
                 return hostpath_status;
-            if (int hostpath_status = part->GetHostPath(host_path_dst, dst_res.local_path); hostpath_status != 0)
+            if (int hostpath_status = dst_part->GetHostPath(host_path_dst, dst_res.local_path); hostpath_status != 0)
                 return hostpath_status;
 
             if (hio_status = this->hio_driver.Link(host_path_src, host_path_dst); hio_status < 0)
                 // hosts operation must succeed in order to continue
                 return hio_status;
             host_used = true;
+        }
+        else if (dst_part->IsHostMounted() ^ src_part->IsHostMounted())
+        {
+            LogError("Links can be only created if both source and destination are host-bound");
+            return -QUASI_ENOSYS;
         }
 
         this->vio_driver.SetCtx(&src_res, host_used, nullptr);
@@ -229,15 +251,37 @@ namespace QuasiFS
     int QFS::Unlink(const fs::path &path)
     {
         Resolved r{};
-        int resolve_status = Resolve(path, r);
+        int resolve_status;
 
-        if (nullptr == r.node || resolve_status < 0)
-        {
-            // parent node must exist, file does not
+        // symlinks mess this whole thing up, so we need to resolve parent and leaf independently
+
+        fs::path parent_path = path.parent_path();
+        fs::path leaf = path.filename();
+
+        // parent, must pass
+        resolve_status = Resolve(parent_path, r);
+        if (resolve_status != 0)
             return resolve_status;
-        }
+
+        if (!r.node->is_dir())
+            return -QUASI_ENOTDIR;
 
         partition_ptr part = r.mountpoint;
+        if (IsPartitionRO(part))
+            return -QUASI_EROFS;
+
+        dir_ptr parent = std::static_pointer_cast<Directory>(r.node);
+        inode_ptr target = parent->lookup(leaf);
+
+        if (nullptr == target)
+            return -QUASI_ENOENT;
+
+        // fix up resolve result for VIO
+        r.parent = parent;
+        r.node = target;
+        r.leaf = leaf;
+        r.local_path /= leaf;
+
         bool host_used = false;
         int hio_status = 0;
         int vio_status = 0;
@@ -285,6 +329,9 @@ namespace QuasiFS
             return status;
 
         partition_ptr part = r.mountpoint;
+        if (IsPartitionRO(part))
+            return -QUASI_EROFS;
+
         bool host_used = false;
         int hio_status = 0;
         int vio_status = 0;
@@ -315,6 +362,11 @@ namespace QuasiFS
         fd_handle_ptr handle = GetHandle(fd);
         if (nullptr == handle)
             return -QUASI_EBADF;
+
+        if (!handle->write)
+            return -QUASI_EBADF;
+
+        // EROFS is guarded by Open()
 
         bool host_used = false;
         int hio_status = 0;
@@ -518,6 +570,10 @@ namespace QuasiFS
             return resolve_status;
 
         partition_ptr part = r.mountpoint;
+
+        if (IsPartitionRO(part))
+            return -QUASI_EROFS;
+
         bool host_used = false;
         int hio_status = 0;
         int vio_status = 0;

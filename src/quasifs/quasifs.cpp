@@ -21,7 +21,7 @@ namespace QuasiFS
 
         mount_t mount_options = {
             .mounted_at{"/"},
-            .parent = this->root,
+            .parentdir = this->root,
             .options = MountOptions::MOUNT_RW,
         };
 
@@ -51,24 +51,36 @@ namespace QuasiFS
         if (!res.node->is_dir())
             return -QUASI_ENOTDIR;
 
-        if (nullptr != GetPartitionInfo(fs))
+        mount_t *existing_fs_options = GetPartitionInfo(fs);
+
+        if (options & MountOptions::MOUNT_REMOUNT)
         {
-            LogError("Partition cannot be mounted twice");
+            if (nullptr == existing_fs_options)
+            {
+                LogError("Can't remount {}: Not mounted", path.string());
+                return -QUASI_EINVAL;
+            }
+
+            auto curopt = &existing_fs_options->options;
+            *curopt = options & (~MountOptions::MOUNT_REMOUNT);
+            return 0;
+        }
+
+        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
+        if (nullptr != existing_fs_options || dir->mounted_root)
+        {
+            // fs_options exists or there's something (else?) mounted there already
+            LogError("Can't mount {}: Already mounted", path.string());
             return -QUASI_EEXIST;
         }
 
         if (options & MountOptions::MOUNT_BIND)
             LogError("Mount --bind not implemented");
 
-        dir_ptr dir = std::static_pointer_cast<Directory>(res.node);
-
-        if (dir->mounted_root)
-            return -QUASI_EEXIST;
-
         dir_ptr fs_root = fs->GetRoot();
         mount_t fs_options = {
             .mounted_at = path,
-            .parent = dir,
+            .parentdir = dir,
             .options = options,
         };
 
@@ -93,16 +105,18 @@ namespace QuasiFS
         if (nullptr == part_opts)
             return -QUASI_EINVAL;
 
-        dir_ptr dir = std::static_pointer_cast<Directory>(part_opts->parent);
+        dir_ptr options_parentdir = part_opts->parentdir;
+        dir_ptr res_parentdir = res.parent;
+        dir_ptr res_rootdir = std::static_pointer_cast<Directory>(res.node);
 
-        if (dir != res.parent)
-            LogError("XDXDXD");
+        if (options_parentdir != res_parentdir)
+            LogError("Resolved mountpoint has different parent in metadata and in resolution result");
 
-        if (nullptr == dir->mounted_root)
+        if (nullptr == res_rootdir)
             // mounted but rootdir disappeared O.o
             return -QUASI_EINVAL;
 
-        dir->mounted_root = nullptr;
+        options_parentdir->mounted_root = nullptr;
         this->block_devices.erase(part);
 
         return 0;
@@ -135,6 +149,9 @@ namespace QuasiFS
 
         do
         {
+            if (iter_path.string().size() >= 256)
+                return -QUASI_ENAMETOOLONG;
+
             status = r.mountpoint->Resolve(iter_path, r);
 
             if (0 != status)
@@ -151,6 +168,9 @@ namespace QuasiFS
                 // main path is overwritten with absolute path from symlink
                 iter_path = std::static_pointer_cast<Symlink>(r.node)->follow();
                 // and if it's really in the way - restore leftover items
+
+                //   Log("Found a symlink to [{}] // merging with // {}", iter_path.string(), leftover.string());
+
                 if (!leftover.empty())
                     iter_path /= leftover;
                 // reset everything to point to rootfs, where absolute path can be resolved again
@@ -164,11 +184,11 @@ namespace QuasiFS
             if (r.node->is_dir())
             {
                 dir_ptr mntparent = r.parent;
-                inode_ptr mntroot = mntparent->mounted_root;
+                dir_ptr mntroot = std::static_pointer_cast<Directory>(r.node);
 
-                if (nullptr != mntroot)
+                if (nullptr != mntparent->mounted_root)
                 {
-                    if (mntroot != r.node)
+                    if (mntroot != mntparent->mounted_root)
                         LogError("Resolved conflicting mount root and node");
 
                     // just like symlinks, only trailing path is saved
@@ -178,15 +198,17 @@ namespace QuasiFS
                     partition_ptr mounted_partition = GetPartitionByParent(mntparent);
 
                     if (nullptr == mounted_partition)
+                    {
+                        r.mountpoint = nullptr;
                         return -QUASI_ENOENT;
+                    }
 
                     r.mountpoint = mounted_partition;
-                    r.local_path = iter_path;
-                    // set by partition resolve
                     r.parent = mntparent;
                     r.node = mntroot;
+                    r.leaf = "/";
 
-                    if (!iter_path.empty())
+                    if (iter_path != "/")
                         continue;
                 }
             }
@@ -200,6 +222,43 @@ namespace QuasiFS
 
         return 0;
     }
+
+    bool QFS::IsOpen(const int fd) noexcept
+    {
+        fd_handle_ptr fh = this->GetHandle(fd);
+        if (nullptr == fh)
+            return false;
+        return fh->IsOpen();
+    }
+
+    int QFS::SetSize(const int fd, uint64_t size) noexcept
+    {
+        fd_handle_ptr fh = this->GetHandle(fd);
+        if (nullptr == fh)
+            return -QUASI_EBADF;
+        return this->FTruncate(fd, size);
+    }
+
+    quasi_ssize_t QFS::GetSize(const int fd) noexcept
+    {
+        fd_handle_ptr fh = this->GetHandle(fd);
+        if (nullptr == fh)
+            return -QUASI_EBADF;
+        if (nullptr == fh->node)
+            return -QUASI_EBADF;
+
+        return fh->node->st.st_size;
+    };
+
+    quasi_ssize_t QFS::GetDirectorySize(const fs::path &path) noexcept
+    {
+        UNIMPLEMENTED();
+        return -QUASI_ENOSYS;
+    };
+
+    //
+    // Privates (don't touch)
+    //
 
     void QFS::SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix)
     {
@@ -316,7 +375,7 @@ namespace QuasiFS
     {
         for (auto &[part, info] : this->block_devices)
         {
-            if (info.parent == dir)
+            if (info.parentdir == dir)
                 return part;
         }
         return nullptr;
