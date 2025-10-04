@@ -122,7 +122,7 @@ namespace QuasiFS
         return 0;
     }
 
-    int QFS::Resolve(const fs::path &path, Resolved &r)
+    int QFS::Resolve(const fs::path &path,Resolved &res)
     {
         if (path.empty())
             return -QUASI_EINVAL;
@@ -142,22 +142,22 @@ namespace QuasiFS
 
         fs::path iter_path = path;
 
-        r.mountpoint = this->rootfs;
-        r.local_path = iter_path;
-        r.parent = this->root;
-        r.node = this->root;
+       res.mountpoint = this->rootfs;
+        res.local_path = iter_path;
+        res.parent = this->root;
+        res.node = this->root;
 
         do
         {
             if (iter_path.string().size() >= 256)
                 return -QUASI_ENAMETOOLONG;
 
-            status = r.mountpoint->Resolve(iter_path, r);
+            status =res.mountpoint->Resolve(iter_path, res);
 
             if (0 != status)
                 return status;
 
-            if (r.node->is_link())
+            if (res.node->is_link())
             {
                 // symlinks consume path from the front, since they point to an absolute location
                 // let's say /link is linked to /dirA/dirB, and we need to resolve /link/dirC
@@ -166,7 +166,7 @@ namespace QuasiFS
                 // which will yield /dirA/dirB/dirC
                 fs::path leftover = iter_path;
                 // main path is overwritten with absolute path from symlink
-                iter_path = std::static_pointer_cast<Symlink>(r.node)->follow();
+                iter_path = std::static_pointer_cast<Symlink>(res.node)->follow();
                 // and if it's really in the way - restore leftover items
 
                 //   Log("Found a symlink to [{}] // merging with // {}", iter_path.string(), leftover.string());
@@ -174,17 +174,17 @@ namespace QuasiFS
                 if (!leftover.empty())
                     iter_path /= leftover;
                 // reset everything to point to rootfs, where absolute path can be resolved again
-                r.mountpoint = this->rootfs;
-                r.parent = this->root;
-                r.node = this->root;
-                r.leaf = "/";
+               res.mountpoint = this->rootfs;
+                res.parent = this->root;
+                res.node = this->root;
+                res.leaf = "/";
                 continue;
             }
 
-            if (r.node->is_dir())
+            if (res.node->is_dir())
             {
-                dir_ptr mntparent = r.parent;
-                dir_ptr mntroot = std::static_pointer_cast<Directory>(r.node);
+                dir_ptr mntparent = res.parent;
+                dir_ptr mntroot = std::static_pointer_cast<Directory>(res.node);
 
                 if (nullptr != mntparent->mounted_root)
                 {
@@ -199,14 +199,14 @@ namespace QuasiFS
 
                     if (nullptr == mounted_partition)
                     {
-                        r.mountpoint = nullptr;
+                       res.mountpoint = nullptr;
                         return -QUASI_ENOENT;
                     }
 
-                    r.mountpoint = mounted_partition;
-                    r.parent = mntparent;
-                    r.node = mntroot;
-                    r.leaf = "/";
+                   res.mountpoint = mounted_partition;
+                    res.parent = mntparent;
+                    res.node = mntroot;
+                    res.leaf = "/";
 
                     if (iter_path != "/")
                         continue;
@@ -291,16 +291,16 @@ namespace QuasiFS
                 fs::path parent_path = pp.parent_path();
                 fs::path leaf = pp.filename();
 
-                Resolved r{};
-                part->Resolve(parent_path, r);
+                Resolved res{};
+                part->Resolve(parent_path, res);
 
-                if (nullptr == r.node)
+                if (nullptr == res.node)
                 {
                     LogError("Cannot resolve quasi-target for sync: {}", parent_path.string());
                     continue;
                 }
 
-                dir_ptr parent_dir = r.node->is_dir() ? std::static_pointer_cast<Directory>(r.node) : nullptr;
+                dir_ptr parent_dir = res.node->is_dir() ? std::static_pointer_cast<Directory>(res.node) : nullptr;
                 inode_ptr new_inode{};
 
                 if (entry->is_directory())

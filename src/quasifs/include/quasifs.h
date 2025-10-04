@@ -82,7 +82,7 @@ namespace QuasiFS
          *      * parent - holding dir that is a mountpoint (/dir/INODE->mounted_dir)
          *      * node - node holding mounted root (/dir/inode->MOUNTED_DIR)
          */
-        int Resolve(const fs::path &path, Resolved &r);
+        int Resolve(const fs::path &path,Resolved &res);
 
         //
         // Inherited from HostIOBase

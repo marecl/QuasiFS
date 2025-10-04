@@ -52,7 +52,7 @@ namespace QuasiFS
         return 0;
     }
 
-    int Partition::Resolve(fs::path &path, Resolved &r)
+    int Partition::Resolve(fs::path &path,Resolved &res)
     {
         if (path.empty())
             return -QUASI_EINVAL;
@@ -60,15 +60,15 @@ namespace QuasiFS
         if (path.is_relative())
             return -QUASI_EBADF;
 
-        r.mountpoint = shared_from_this();
-        r.local_path = "/";
-        r.parent = this->root;
-        r.node = this->root;
-        r.leaf = "";
+       res.mountpoint = shared_from_this();
+        res.local_path = "/";
+        res.parent = this->root;
+        res.node = this->root;
+        res.leaf = "";
 
         // these hold up between iterations, but setting them can be ignored if the function is about to return
-        dir_ptr parent = r.parent;
-        inode_ptr current = r.node;
+        dir_ptr parent = res.parent;
+        inode_ptr current = res.node;
 
         bool is_final = false;
 
@@ -83,10 +83,10 @@ namespace QuasiFS
 
             if (*part == "/")
             {
-                r.local_path = "/";
-                r.parent = r.parent;
-                r.node = r.node;
-                r.leaf = "/";
+                res.local_path = "/";
+                res.parent = res.parent;
+                res.node = res.node;
+                res.leaf = "/";
                 continue;
             }
 
@@ -124,16 +124,14 @@ namespace QuasiFS
                 parent = dir;
                 current = dir->lookup(*part);
 
-                r.parent = parent;
-                r.node = current;
-                r.leaf = *part;
-                std::string qwe = *part;
-
-                r.local_path /= *part;
+                res.local_path /= *part;
+                res.parent = parent;
+                res.node = current;
+                res.leaf = *part;
             }
 
             // file not found in current directory, ENOENT
-            if (nullptr == r.node)
+            if (nullptr == res.node)
             {
                 // zero out everything
                 // avoids a condition where calling function may think that parent
@@ -141,8 +139,8 @@ namespace QuasiFS
                 // middle of the path
                 if (!is_final)
                 {
-                    r.node = nullptr;
-                    r.parent = nullptr;
+                    res.node = nullptr;
+                    res.parent = nullptr;
                     //        Log("enoent as fuck");
                 }
                 //      Log("enoent");
@@ -177,9 +175,9 @@ namespace QuasiFS
                         remainder /= *p;
                     path = remainder;
                     // Log("\t\t-> mountpoint: Modifying path to {}", path.string());
-                    r.parent = current_dir; // no point, unused in this context
-                    r.node = current_dir->mounted_root;
-                    r.leaf = *part;
+                    res.parent = current_dir; // no point, unused in this context
+                    res.node = current_dir->mounted_root;
+                    res.leaf = *part;
 
                     return 0;
                 }
@@ -196,9 +194,9 @@ namespace QuasiFS
                 path = remainder;
                 //     Log("\t-> symlink: Remaining path: [{}]", path.string());
 
-                r.parent = parent;
-                r.node = current;
-                r.leaf = *part;
+                res.parent = parent;
+                res.node = current;
+                res.leaf = *part;
                 return 0;
             }
         }
@@ -270,36 +268,6 @@ namespace QuasiFS
         if (ret == 0)
             IndexInode(child);
         return ret;
-    }
-
-    int Partition::rm(fileno_t fileno)
-    {
-        if (fileno == -1)
-            return -QUASI_EINVAL;
-
-        inode_ptr target = GetInodeByFileno(fileno);
-        if (nullptr == target)
-            return -QUASI_ENOENT;
-
-        return rm(target);
-    }
-
-    int Partition::rm(fs::path path)
-    {
-        if (path.empty())
-            return -QUASI_EINVAL;
-
-        // resolve name
-        // Resolved r =
-        inode_ptr i = nullptr;
-        return rm(i);
-    }
-
-    int Partition::rm(inode_ptr node)
-    {
-        if (nullptr == node)
-            return -QUASI_ENOENT;
-        return 0;
     }
 
     int Partition::mkdir(dir_ptr parent, const std::string &name)

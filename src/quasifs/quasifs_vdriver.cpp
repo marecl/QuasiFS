@@ -18,21 +18,21 @@ namespace QuasiFS
 
     int QFS::Open(const fs::path &path, int flags, quasi_mode_t mode)
     {
-        Resolved r{};
+        Resolved res{};
         // resolve for parent dir to avoid treating ENOENT as missing just the end file
-        int resolve_status = this->Resolve(path, r);
+        int resolve_status = this->Resolve(path, res);
 
         // enoent on last element in the path is good
         if (-QUASI_ENOENT == resolve_status)
         {
-            if (nullptr == r.parent)
+            if (nullptr == res.parent)
                 return -QUASI_ENOENT;
         }
         else if (0 != resolve_status)
             return resolve_status;
 
-        partition_ptr part = r.mountpoint;
-        dir_ptr parent_node = std::static_pointer_cast<Directory>(r.parent);
+        partition_ptr part =res.mountpoint;
+        dir_ptr parent_node = std::static_pointer_cast<Directory>(res.parent);
 
         bool request_read = !(flags & O_WRONLY) | O_RDWR;
         bool request_write = flags & (O_WRONLY | O_RDWR);
@@ -47,7 +47,7 @@ namespace QuasiFS
             return -QUASI_EROFS;
 
         // if it doesn't exist, check the parent
-        inode_ptr checked_node = nullptr == r.node ? parent_node : r.node;
+        inode_ptr checked_node = nullptr == res.node ? parent_node : res.node;
 
         if ((request_read && !checked_node->CanRead()) ||
             (request_write && !checked_node->CanWrite()))
@@ -64,7 +64,7 @@ namespace QuasiFS
         if (part->IsHostMounted())
         {
             fs::path host_path_target{};
-            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); hostpath_status != 0)
+            if (int hostpath_status = part->GetHostPath(host_path_target, res.local_path); hostpath_status != 0)
                 return hostpath_status;
 
             if (hio_status = this->hio_driver.Open(host_path_target, flags, mode); hio_status < 0)
@@ -73,8 +73,8 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.SetCtx(&r, host_used, nullptr);
-        vio_status = this->vio_driver.Open(r.local_path, flags, mode);
+        this->vio_driver.SetCtx(&res,host_used, nullptr);
+        vio_status = this->vio_driver.Open(res.local_path, flags, mode);
         this->vio_driver.ClearCtx();
 
         if (int tmp_hio_status = hio_status >= 0 ? 0 : hio_status; host_used && (tmp_hio_status != vio_status))
@@ -86,7 +86,7 @@ namespace QuasiFS
         fd_handle_ptr handle = File::Create();
         // nasty hack, but: of it existed, no change
         // if it didn't, VIO will update this member
-        handle->node = r.node;
+        handle->node = res.node;
         // virtual fd is stored in open_fd map
         handle->host_fd = host_used ? hio_status : -1;
         handle->read = request_read;
@@ -250,7 +250,7 @@ namespace QuasiFS
 
     int QFS::Unlink(const fs::path &path)
     {
-        Resolved r{};
+        Resolved res{};
         int resolve_status;
 
         // symlinks mess this whole thing up, so we need to resolve parent and leaf independently
@@ -259,28 +259,28 @@ namespace QuasiFS
         fs::path leaf = path.filename();
 
         // parent, must pass
-        resolve_status = Resolve(parent_path, r);
+        resolve_status = Resolve(parent_path, res);
         if (resolve_status != 0)
             return resolve_status;
 
-        if (!r.node->is_dir())
+        if (!res.node->is_dir())
             return -QUASI_ENOTDIR;
 
-        partition_ptr part = r.mountpoint;
+        partition_ptr part =res.mountpoint;
         if (IsPartitionRO(part))
             return -QUASI_EROFS;
 
-        dir_ptr parent = std::static_pointer_cast<Directory>(r.node);
+        dir_ptr parent = std::static_pointer_cast<Directory>(res.node);
         inode_ptr target = parent->lookup(leaf);
 
         if (nullptr == target)
             return -QUASI_ENOENT;
 
         // fix up resolve result for VIO
-        r.parent = parent;
-        r.node = target;
-        r.leaf = leaf;
-        r.local_path /= leaf;
+        res.parent = parent;
+        res.node = target;
+        res.leaf = leaf;
+        res.local_path /= leaf;
 
         bool host_used = false;
         int hio_status = 0;
@@ -289,7 +289,7 @@ namespace QuasiFS
         if (part->IsHostMounted())
         {
             fs::path host_path_target{};
-            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); hostpath_status != 0)
+            if (int hostpath_status = part->GetHostPath(host_path_target, res.local_path); hostpath_status != 0)
                 return hostpath_status;
 
             if (hio_status = this->hio_driver.Unlink(host_path_target); hio_status < 0)
@@ -298,8 +298,8 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.SetCtx(&r, host_used, nullptr);
-        vio_status = this->vio_driver.Unlink(r.local_path);
+        this->vio_driver.SetCtx(&res,host_used, nullptr);
+        vio_status = this->vio_driver.Unlink(res.local_path);
         this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
@@ -322,13 +322,13 @@ namespace QuasiFS
 
     int QFS::Truncate(const fs::path &path, quasi_size_t length)
     {
-        Resolved r{};
-        int status = Resolve(path, r);
+        Resolved res{};
+        int status = Resolve(path, res);
 
         if (0 != status)
             return status;
 
-        partition_ptr part = r.mountpoint;
+        partition_ptr part =res.mountpoint;
         if (IsPartitionRO(part))
             return -QUASI_EROFS;
 
@@ -339,7 +339,7 @@ namespace QuasiFS
         if (part->IsHostMounted())
         {
             fs::path host_path_target;
-            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); 0 != hostpath_status)
+            if (int hostpath_status = part->GetHostPath(host_path_target, res.local_path); 0 != hostpath_status)
                 return hostpath_status;
             if (hio_status = this->hio_driver.Truncate(host_path_target, length); hio_status < 0)
                 // hosts operation must succeed in order to continue
@@ -347,8 +347,8 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.SetCtx(&r, host_used, nullptr);
-        vio_status = this->vio_driver.Truncate(r.local_path, length);
+        this->vio_driver.SetCtx(&res,host_used, nullptr);
+        vio_status = this->vio_driver.Truncate(res.local_path, length);
         this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
@@ -555,21 +555,21 @@ namespace QuasiFS
 
     int QFS::MKDir(const fs::path &path, quasi_mode_t mode)
     {
-        Resolved r{};
-        int resolve_status = this->Resolve(path, r);
+        Resolved res{};
+        int resolve_status = this->Resolve(path, res);
 
         if (0 == resolve_status)
             return -QUASI_EEXIST;
 
         if (-QUASI_ENOENT == resolve_status)
         {
-            if (nullptr == r.parent)
+            if (nullptr == res.parent)
                 return -QUASI_ENOENT;
         }
         else if (0 != resolve_status)
             return resolve_status;
 
-        partition_ptr part = r.mountpoint;
+        partition_ptr part =res.mountpoint;
 
         if (IsPartitionRO(part))
             return -QUASI_EROFS;
@@ -581,7 +581,7 @@ namespace QuasiFS
         if (part->IsHostMounted())
         {
             fs::path host_path_target{};
-            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); 0 != hostpath_status)
+            if (int hostpath_status = part->GetHostPath(host_path_target, res.local_path); 0 != hostpath_status)
                 return hostpath_status;
 
             if (hio_status = this->hio_driver.MKDir(host_path_target, mode); 0 != hio_status)
@@ -590,8 +590,8 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.SetCtx(&r, host_used, nullptr);
-        vio_status = this->vio_driver.MKDir(r.local_path, mode);
+        this->vio_driver.SetCtx(&res,host_used, nullptr);
+        vio_status = this->vio_driver.MKDir(res.local_path, mode);
         this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
@@ -602,13 +602,13 @@ namespace QuasiFS
 
     int QFS::RMDir(const fs::path &path)
     {
-        Resolved r{};
-        int status = Resolve(path, r);
+        Resolved res{};
+        int status = Resolve(path, res);
 
         if (0 != status)
             return status;
 
-        partition_ptr part = r.mountpoint;
+        partition_ptr part =res.mountpoint;
         bool host_used = false;
         int hio_status = 0;
         int vio_status = 0;
@@ -616,7 +616,7 @@ namespace QuasiFS
         if (part->IsHostMounted())
         {
             fs::path host_path_target{};
-            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); 0 != hostpath_status)
+            if (int hostpath_status = part->GetHostPath(host_path_target, res.local_path); 0 != hostpath_status)
                 return hostpath_status;
 
             if (hio_status = this->hio_driver.RMDir(host_path_target); 0 != hio_status)
@@ -625,8 +625,8 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.SetCtx(&r, host_used, nullptr);
-        status = this->vio_driver.RMDir(r.local_path);
+        this->vio_driver.SetCtx(&res,host_used, nullptr);
+        status = this->vio_driver.RMDir(res.local_path);
         this->vio_driver.ClearCtx();
 
         if (host_used && (hio_status != vio_status))
@@ -637,16 +637,16 @@ namespace QuasiFS
 
     int QFS::Stat(const fs::path &path, quasi_stat_t *statbuf)
     {
-        Resolved r{};
-        int resolve_status = Resolve(path, r);
+        Resolved res{};
+        int resolve_status = Resolve(path, res);
 
-        if (nullptr == r.node || resolve_status < 0)
+        if (nullptr == res.node || resolve_status < 0)
         {
             // parent node must exist, file does not
             return resolve_status;
         }
 
-        partition_ptr part = r.mountpoint;
+        partition_ptr part =res.mountpoint;
         bool host_used = false;
         int hio_status = 0;
         int vio_status = 0;
@@ -657,7 +657,7 @@ namespace QuasiFS
         if (part->IsHostMounted())
         {
             fs::path host_path_target{};
-            if (int hostpath_status = part->GetHostPath(host_path_target, r.local_path); hostpath_status != 0)
+            if (int hostpath_status = part->GetHostPath(host_path_target, res.local_path); hostpath_status != 0)
                 return hostpath_status;
 
             if (hio_status = this->hio_driver.Stat(host_path_target, &hio_stat); 0 != hio_status)
@@ -667,8 +667,8 @@ namespace QuasiFS
             host_used = true;
         }
 
-        this->vio_driver.SetCtx(&r, host_used, nullptr);
-        vio_status = this->vio_driver.Stat(r.local_path, &vio_stat);
+        this->vio_driver.SetCtx(&res,host_used, nullptr);
+        vio_status = this->vio_driver.Stat(res.local_path, &vio_stat);
         this->vio_driver.ClearCtx();
 
         if (host_used)

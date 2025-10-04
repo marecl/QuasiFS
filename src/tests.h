@@ -174,19 +174,19 @@ void TestTouchUnlinkFile(QFS &qfs)
 {
     LogTest("Create a file");
     const fs::path path = "/testfile";
-    Resolved r{};
+    Resolved res{};
 
     if (int status = qfs.Creat(path); status >= 0)
         LogSuccess("Touched {}", path.string());
     else
         LogError("touch {} : {}", path.string(), status);
 
-    if (int status = qfs.Resolve(path, r); status == 0)
+    if (int status = qfs.Resolve(path, res); status == 0)
         LogSuccess("Resolved");
     else
         LogError("Can't resolve: {}", status);
 
-    if (r.parent != qfs.GetRoot())
+    if (res.parent != qfs.GetRoot())
         LogError("Wrong parent");
 
     if (int status = qfs.Unlink(path); status == 0)
@@ -194,7 +194,7 @@ void TestTouchUnlinkFile(QFS &qfs)
     else
         LogError("unlink failed: {}", status);
 
-    if (int status = qfs.Resolve(path, r); status == -QUASI_ENOENT)
+    if (int status = qfs.Resolve(path, res); status == -QUASI_ENOENT)
         LogSuccess("Removal confirmed");
     else
         LogError("file not removed: {}", status);
@@ -204,32 +204,32 @@ void TestMkRmdir(QFS &qfs)
 {
     LogTest("Create a directory");
     fs::path path = "/testdir";
-    Resolved r{};
+    Resolved res{};
 
     if (int status = qfs.MKDir(path); status == 0)
         LogSuccess("mkdir'd {}", path.string());
     else
         LogError("mkdir {} : {}", path.string(), status);
 
-    if (int status = qfs.Resolve(path, r); status == 0)
+    if (int status = qfs.Resolve(path, res); status == 0)
         LogSuccess("Resolved");
     else
         LogError("Can't resolve: {}", status);
 
-    if (int status = qfs.Resolve("/testdir", r); status == 0)
+    if (int status = qfs.Resolve("/testdir", res); status == 0)
         LogSuccess("Resolved /testdir");
     else
         LogError("Can't resolve: {}", status);
 
-    if (int status = qfs.Resolve("/testdir/", r); status == 0)
+    if (int status = qfs.Resolve("/testdir/", res); status == 0)
         LogSuccess("Resolved /testdir/");
     else
         LogError("Can't resolve /testdir/ : {}", status);
 
-    if (r.parent != qfs.GetRoot())
+    if (res.parent != qfs.GetRoot())
         LogError("Wrong parent");
-    auto q = r.parent;
-    auto qw = r.node;
+    auto q = res.parent;
+    auto qw = res.node;
     auto qwe = qfs.GetRoot();
 
     if (int status = qfs.RMDir(path); status == 0)
@@ -237,7 +237,7 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("rmdir failed");
 
-    if (int status = qfs.Resolve(path, r); -QUASI_ENOENT == status)
+    if (int status = qfs.Resolve(path, res); -QUASI_ENOENT == status)
         LogSuccess("Removal confirmed");
     else
         LogError("dir not removed: {}", status);
@@ -250,7 +250,7 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("mkdir {} : {}", path.string(), status);
 
-    if (int status = qfs.Resolve(path, r); status == 0)
+    if (int status = qfs.Resolve(path, res); status == 0)
         LogSuccess("Resolved");
     else
         LogError("Can't resolve: {}", status);
@@ -260,7 +260,7 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("rmdir failed");
 
-    if (int status = qfs.Resolve(path, r); -QUASI_ENOENT == status)
+    if (int status = qfs.Resolve(path, res); -QUASI_ENOENT == status)
         LogSuccess("Removal confirmed");
     else
         LogError("dir not removed: {}", status);
@@ -281,27 +281,27 @@ void TestMount(QFS &qfs)
         LogError("Can't create partition object");
     }
 
-    Resolved r{};
+    Resolved res{};
 
     qfs.MKDir("/dummy");
     qfs.MKDir("/dummy/mount");
 
-    if (int status = qfs.Resolve("/dummy/mount", r); status == 0)
+    if (int status = qfs.Resolve("/dummy/mount", res); status == 0)
         LogSuccess("mkdir'd /dummy/mount");
     else
     {
         LogError("Mountpoint dir not created: {}", status);
     }
 
-    if (nullptr == r.parent)
+    if (nullptr == res.parent)
         LogError("Parent doesn't exist");
 
-    if (nullptr == r.node)
+    if (nullptr == res.node)
         LogError("Child doesn't exist");
 
-    auto parent_from_root = r.parent->lookup("mount")->GetFileno();
-    auto self_fileno = std::static_pointer_cast<Directory>(r.node)->lookup(".")->GetFileno();
-    auto parent_fileno = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
+    auto parent_from_root = res.parent->lookup("mount")->GetFileno();
+    auto self_fileno = std::static_pointer_cast<Directory>(res.node)->lookup(".")->GetFileno();
+    auto parent_fileno = std::static_pointer_cast<Directory>(res.node)->lookup("..")->GetFileno();
 
     Log("\tPre-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root, parent_fileno, self_fileno);
 
@@ -310,27 +310,27 @@ void TestMount(QFS &qfs)
     else
         LogError("Can't mount: {}", status);
 
-    if (int status = qfs.Resolve("/dummy/mount", r); status == 0)
+    if (int status = qfs.Resolve("/dummy/mount", res); status == 0)
         LogSuccess("After-mount resolved");
     else
         LogError("Can't resolve /dummy/mount after mounting: {}", status);
 
-    if (nullptr == r.node)
+    if (nullptr == res.node)
     {
         LogError("Post-mount dir not found");
     }
 
-    if (r.mountpoint != part)
+    if (res.mountpoint != part)
     {
         LogError("Bad partition");
     }
 
-    qfs.Resolve("/dummy", r);
-    auto parent_from_root_mount = std::static_pointer_cast<Directory>(r.node)->lookup("mount")->GetFileno();
+    qfs.Resolve("/dummy", res);
+    auto parent_from_root_mount = std::static_pointer_cast<Directory>(res.node)->lookup("mount")->GetFileno();
 
-    qfs.Resolve("/dummy/mount", r);
-    auto self_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup(".")->GetFileno();
-    auto parent_fileno_mount = std::static_pointer_cast<Directory>(r.node)->lookup("..")->GetFileno();
+    qfs.Resolve("/dummy/mount", res);
+    auto self_fileno_mount = std::static_pointer_cast<Directory>(res.node)->lookup(".")->GetFileno();
+    auto parent_fileno_mount = std::static_pointer_cast<Directory>(res.node)->lookup("..")->GetFileno();
 
     Log("\tPost-mount relation of /dummy/mount: {} (parent), {} (parent from self), {} (self)", parent_from_root_mount, parent_fileno_mount, self_fileno_mount);
     if (2 != self_fileno_mount)
@@ -358,7 +358,7 @@ void TestMount(QFS &qfs)
         LogError("Mounted fileno is the same as regular dir (mount failed)");
     }
 
-    if (r.node != part->GetRoot())
+    if (res.node != part->GetRoot())
     {
         LogError("Mountpoint root isn't partition root");
     }
@@ -514,8 +514,8 @@ void TestMountRO(QFS &qfs)
     else
     {
         LogError("Unexpected return from creat(): {}", fd);
-        Resolved r;
-        if (int resolve_status = qfs.Resolve("/ro/bad", r); resolve_status == 0)
+        Resolved res{};
+        if (int resolve_status = qfs.Resolve("/ro/bad", res); resolve_status == 0)
             LogError("Created a file in RO partition");
     }
 
@@ -546,12 +546,12 @@ void TestStLinkFile(QFS &qfs)
 {
     LogTest("File link counter");
 
-    Resolved r{};
+    Resolved res{};
 
     qfs.Creat("/file");
-    qfs.Resolve("/file", r);
+    qfs.Resolve("/file", res);
 
-    file_ptr f = std::reinterpret_pointer_cast<RegularFile>(r.node);
+    file_ptr f = std::reinterpret_pointer_cast<RegularFile>(res.node);
 
     auto nlink = &f->st.st_nlink;
 
@@ -602,12 +602,12 @@ void TestStLinkDir(QFS &qfs)
 {
     LogTest("Dir link counter");
 
-    Resolved r{};
+    Resolved res{};
 
     qfs.MKDir("/dir");
-    qfs.Resolve("/dir", r);
+    qfs.Resolve("/dir", res);
 
-    dir_ptr f = std::reinterpret_pointer_cast<Directory>(r.node);
+    dir_ptr f = std::reinterpret_pointer_cast<Directory>(res.node);
 
     auto nlink = &f->st.st_nlink;
 
@@ -673,18 +673,18 @@ void TestSymlinkFile(QFS &qfs)
     qfs.MKDir("/oneup");
     qfs.Close(qfs.Creat("/oneup/link_source_file_up"));
 
-    Resolved r;
+    Resolved res{};
 
-    int resolve_status = qfs.Resolve("/link_source_file", r);
-    const file_ptr src_file = std::static_pointer_cast<RegularFile>(r.node);
-    resolve_status = qfs.Resolve("/oneup/link_source_file_up", r);
-    const file_ptr src_file_up = std::static_pointer_cast<RegularFile>(r.node);
+    int resolve_status = qfs.Resolve("/link_source_file", res);
+    const file_ptr src_file = std::static_pointer_cast<RegularFile>(res.node);
+    resolve_status = qfs.Resolve("/oneup/link_source_file_up", res);
+    const file_ptr src_file_up = std::static_pointer_cast<RegularFile>(res.node);
     file_ptr dst_file;
 
     // link, same directory
     qfs.LinkSymbolic("/link_source_file", "/link_dest_file");
-    resolve_status = qfs.Resolve("/link_dest_file", r);
-    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/link_dest_file", res);
+    dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file == dst_file)
         LogSuccess("Same directory symlink works");
     else
@@ -692,8 +692,8 @@ void TestSymlinkFile(QFS &qfs)
 
     // link, same directory, 1 level deep
     qfs.LinkSymbolic("/oneup/link_source_file_up", "/oneup/link_dest_file_up");
-    resolve_status = qfs.Resolve("/oneup/link_dest_file_up", r);
-    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/oneup/link_dest_file_up", res);
+    dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file_up == dst_file)
         LogSuccess("Same directory, 1 level deep symlink works");
     else
@@ -701,8 +701,8 @@ void TestSymlinkFile(QFS &qfs)
 
     // link, same directory, 1 level deep
     qfs.LinkSymbolic("/oneup/link_source_file_up", "/link_dest_file_to_down");
-    resolve_status = qfs.Resolve("/link_dest_file_to_down", r);
-    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/link_dest_file_to_down", res);
+    dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file_up == dst_file)
         LogSuccess("Same directory, up->down works");
     else
@@ -710,8 +710,8 @@ void TestSymlinkFile(QFS &qfs)
 
     // link, same directory, 1 level deep
     qfs.LinkSymbolic("/link_source_file", "/oneup/link_dest_file_to_up");
-    resolve_status = qfs.Resolve("/oneup/link_dest_file_to_up", r);
-    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/oneup/link_dest_file_to_up", res);
+    dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file == dst_file)
         LogSuccess("Same directory, down->up works");
     else
@@ -726,18 +726,18 @@ void TestSymlinkDir(QFS &qfs)
     qfs.MKDir("/oneup");
     qfs.MKDir("/oneup/link_source_dir_up");
 
-    Resolved r;
+    Resolved res{};
 
-    int resolve_status = qfs.Resolve("/link_source_dir", r);
-    const dir_ptr src_dir = std::static_pointer_cast<Directory>(r.node);
-    resolve_status = qfs.Resolve("/oneup/link_source_dir_up", r);
-    const dir_ptr src_dir_up = std::static_pointer_cast<Directory>(r.node);
+    int resolve_status = qfs.Resolve("/link_source_dir", res);
+    const dir_ptr src_dir = std::static_pointer_cast<Directory>(res.node);
+    resolve_status = qfs.Resolve("/oneup/link_source_dir_up", res);
+    const dir_ptr src_dir_up = std::static_pointer_cast<Directory>(res.node);
     dir_ptr dst_dir;
 
     // link, same directory
     qfs.LinkSymbolic("/link_source_dir", "/link_dest_dir");
-    resolve_status = qfs.Resolve("/link_dest_dir", r);
-    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    resolve_status = qfs.Resolve("/link_dest_dir", res);
+    dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir == dst_dir)
         LogSuccess("Same directory symlink works");
     else
@@ -745,8 +745,8 @@ void TestSymlinkDir(QFS &qfs)
 
     // link, same directory, 1 level deep
     qfs.LinkSymbolic("/oneup/link_source_dir_up", "/oneup/link_dest_dir_up");
-    resolve_status = qfs.Resolve("/oneup/link_dest_dir_up", r);
-    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    resolve_status = qfs.Resolve("/oneup/link_dest_dir_up", res);
+    dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir_up == dst_dir)
         LogSuccess("Same directory, 1 level deep symlink works");
     else
@@ -754,8 +754,8 @@ void TestSymlinkDir(QFS &qfs)
 
     // link, same directory, 1 level deep
     qfs.LinkSymbolic("/oneup/link_source_dir_up", "/link_dest_dir_to_down");
-    resolve_status = qfs.Resolve("/link_dest_dir_to_down", r);
-    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    resolve_status = qfs.Resolve("/link_dest_dir_to_down", res);
+    dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir_up == dst_dir)
         LogSuccess("Same directory, up->down works");
     else
@@ -763,8 +763,8 @@ void TestSymlinkDir(QFS &qfs)
 
     // link, same directory, 1 level deep
     qfs.LinkSymbolic("/link_source_dir", "/oneup/link_dest_dir_to_up");
-    resolve_status = qfs.Resolve("/oneup/link_dest_dir_to_up", r);
-    dst_dir = std::static_pointer_cast<Directory>(r.node);
+    resolve_status = qfs.Resolve("/oneup/link_dest_dir_to_up", res);
+    dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir == dst_dir)
         LogSuccess("Same directory, down->up works");
     else
@@ -781,9 +781,9 @@ void TestSymlinkCursed(QFS &qfs)
     qfs.MKDir("/layer1/layer2/layer3");
     qfs.MKDir("/layer1/layer2/layer3/layer4");
 
-    Resolved r;
-    int resolve_status = qfs.Resolve("/src_file", r);
-    const file_ptr src_file = std::static_pointer_cast<RegularFile>(r.node);
+    Resolved res{};
+    int resolve_status = qfs.Resolve("/src_file", res);
+    const file_ptr src_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file == nullptr)
         LogError("Didn't create test file");
     file_ptr dst_file;
@@ -791,8 +791,8 @@ void TestSymlinkCursed(QFS &qfs)
     // linking directories
     qfs.LinkSymbolic("/layer1/layer2/layer3/layer4", "/l4");
     qfs.LinkSymbolic("/src_file", "/l4/sos");
-    resolve_status = qfs.Resolve("/l4/sos", r);
-    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/l4/sos", res);
+    dst_file = std::static_pointer_cast<RegularFile>(res.node);
 
     if (src_file == dst_file)
         LogSuccess("File symlinked to symlinked directory tree");
@@ -801,8 +801,8 @@ void TestSymlinkCursed(QFS &qfs)
 
     // linking directories
     qfs.LinkSymbolic("/l4/sos", "/l4/sos2");
-    resolve_status = qfs.Resolve("/l4/sos2", r);
-    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/l4/sos2", res);
+    dst_file = std::static_pointer_cast<RegularFile>(res.node);
 
     if (src_file == dst_file)
         LogSuccess("File symlinked to file symlinked in symlinked directory tree");
@@ -811,8 +811,8 @@ void TestSymlinkCursed(QFS &qfs)
 
     qfs.LinkSymbolic("/layer1/layer2/layer3/layer4", "/layer1/layer2/early4");
     qfs.LinkSymbolic("/src_file", "/layer1/layer2/early4/early_file");
-    resolve_status = qfs.Resolve("/layer1/layer2/early4/early_file", r);
-    dst_file = std::static_pointer_cast<RegularFile>(r.node);
+    resolve_status = qfs.Resolve("/layer1/layer2/early4/early_file", res);
+    dst_file = std::static_pointer_cast<RegularFile>(res.node);
 
     if (src_file == dst_file)
         LogSuccess("File symlinked to file symlinked in a directory symlinked within directory tree");
@@ -822,14 +822,14 @@ void TestSymlinkCursed(QFS &qfs)
     // loops
     qfs.MKDir("/tmp");
     qfs.LinkSymbolic("/tmp/loopLinkDir", "/tmp/loopLinkDir");
-    resolve_status = qfs.Resolve("/tmp/loopLinkDir", r);
+    resolve_status = qfs.Resolve("/tmp/loopLinkDir", res);
     if (-QUASI_ELOOP == resolve_status)
         LogSuccess("Symlink loop safeguard works for directories");
     else
         LogError("Symlink loop safeguard for directories didn't trigger: Resolve returned {}", resolve_status);
 
     qfs.LinkSymbolic("/tmp/loopLinkFile", "/tmp/loopLinkFile");
-    resolve_status = qfs.Resolve("/tmp/loopLinkFile", r);
+    resolve_status = qfs.Resolve("/tmp/loopLinkFile", res);
     if (-QUASI_ELOOP == resolve_status)
         LogSuccess("Symlink loop safeguard works for files");
     else
@@ -838,7 +838,7 @@ void TestSymlinkCursed(QFS &qfs)
     qfs.Creat("/missing_file");
     qfs.LinkSymbolic("/missing_file", "/dangling_file");
     qfs.Unlink("/missing_file");
-    resolve_status = qfs.Resolve("/dangling_file", r);
+    resolve_status = qfs.Resolve("/dangling_file", res);
 
     if (-QUASI_ENOENT == resolve_status)
         LogSuccess("Dangling symlink returns ENOENT");
@@ -850,7 +850,7 @@ void TestSymlinkCursed(QFS &qfs)
     qfs.Creat("/dir2/XD");
     qfs.LinkSymbolic("/dir2", "/dir1/missing");
 
-    resolve_status = qfs.Resolve("/dir1/missing/XD", r);
+    resolve_status = qfs.Resolve("/dir1/missing/XD", res);
     if (0 == resolve_status)
         LogSuccess("Resolved file in directory symlinked inside a tree");
     else
@@ -861,7 +861,7 @@ void TestSymlinkCursed(QFS &qfs)
         LogError("Unlink should remove symlink when path is not preceeded with /");
     }
 
-    resolve_status = qfs.Resolve("/dir1/missing/XD", r);
+    resolve_status = qfs.Resolve("/dir1/missing/XD", res);
 
     if (-QUASI_ENOENT == resolve_status)
         LogSuccess("Dangling symlink inside a tree returns ENOENT");
@@ -875,7 +875,7 @@ void TestSymlinkCursed(QFS &qfs)
         LogError("Didn't unlink a symlink pointing at a file");
     }
 
-    resolve_status = qfs.Resolve("/dir2/XD", r);
+    resolve_status = qfs.Resolve("/dir2/XD", res);
 
     if (0 == resolve_status)
         LogSuccess("Unlinking a symlink didn't touch linked file");
@@ -891,7 +891,7 @@ void TestFileOpen(QFS &qfs)
 {
     LogTest("File open/close");
 
-    Resolved r{};
+    Resolved res{};
 
     if (int status = qfs.Open("/file_open", 0); -QUASI_ENOENT == status)
     {
@@ -910,7 +910,7 @@ void TestFileOpen(QFS &qfs)
         LogError("O_READ | O_CREAT, nonexistent file: {}", status);
 
     //
-    if (-QUASI_ENOENT == qfs.Resolve("/file_open", r))
+    if (-QUASI_ENOENT == qfs.Resolve("/file_open", res))
         LogError("O_CREAT didn't create the file");
     //
 
@@ -946,14 +946,14 @@ void TestFileOps(QFS &qfs)
     LogTest("File operations");
 
     int fd = qfs.Creat("/rwtest");
-    Resolved r;
-    qfs.Resolve("/rwtest", r);
+    Resolved res{};
+    qfs.Resolve("/rwtest", res);
 
-    if (r.node == nullptr)
+    if (res.node == nullptr)
     {
         LogError("Didn't create /rwtest file");
     }
-    auto size = &r.node->st.st_size;
+    auto size = &res.node->st.st_size;
     char buffer[1024];
 
     //
@@ -1056,7 +1056,7 @@ void TestDirOpen(QFS &qfs)
 {
     LogTest("Dir open/close");
 
-    Resolved r{};
+    Resolved res{};
 
     if (int status = qfs.Open("/dir_open", O_DIRECTORY); -QUASI_ENOENT == status)
     {
