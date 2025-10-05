@@ -178,13 +178,13 @@ int main() {
     // this skips permission checks, so it will be accessible
     ro_partition->touch(ro_partition->GetRoot(), "rofile_old", RegularFile::Create());
 
-    vh.Operation.MKDir("/vdir");
-    vh.Operation.MKDir("/ro");
-    vh.Operation.MKDir("/hdir");
+    qfs.Operation.MKDir("/vdir");
+    qfs.Operation.MKDir("/ro");
+    qfs.Operation.MKDir("/hdir");
 
-    qfs.Mount("/vdir", part, MountOptions::MOUNT_RW);
-    qfs.Mount("/ro", part);
-    qfs.Mount("/hdir", part, MountOptions::MOUNT_RW);
+    qfs.Mount("/vdir", virtual_partition, MountOptions::MOUNT_RW);
+    qfs.Mount("/ro", ro_partition);
+    qfs.Mount("/hdir", host_partition, MountOptions::MOUNT_RW);
 
     qfs.Operation.Creat("/vdir/vfile");
     qfs.Operation.Creat("/ro/rofile_new");  // this will fail
@@ -193,7 +193,9 @@ int main() {
     printTree(qfs.GetRoot(), "/", 0);
 }
 ```
-
+### Other
+To see other examples, see tests. They contain (some) comments on how things work, as well as expected values.
+I'm trying to make them as exhaustive as possible to mimic original behaviour.
 
 # TODO
 
