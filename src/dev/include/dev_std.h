@@ -1,14 +1,16 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include <cstring>
 
-#include "../../quasifs/include/quasifs_inode_regularfile.h"
+#include "../../quasifs/include/quasifs_inode_device.h"
 
 namespace Devices
 {
     using namespace QuasiFS;
 
-    class DevStdout : public QuasiFS::RegularFile
+    class DevStdout : public QuasiFS::Device
     {
     public:
         DevStdout() = default;
@@ -18,7 +20,7 @@ namespace Devices
         quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
-    class DevStdin : public QuasiFS::RegularFile
+    class DevStdin : public QuasiFS::Device
     {
     public:
         DevStdin() = default;
@@ -28,7 +30,7 @@ namespace Devices
         quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
-    class DevStderr : public QuasiFS::RegularFile
+    class DevStderr : public QuasiFS::Device
     {
     public:
         DevStderr() = default;
@@ -38,7 +40,7 @@ namespace Devices
         quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
-    class DevRandom : public QuasiFS::RegularFile
+    class DevRandom : public QuasiFS::Device
     {
     public:
         DevRandom() = default;
@@ -48,7 +50,7 @@ namespace Devices
         quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
-    class DevZero : public QuasiFS::RegularFile
+    class DevZero : public QuasiFS::Device
     {
     public:
         DevZero() = default;
@@ -58,7 +60,7 @@ namespace Devices
         quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
     };
 
-    class DevNull : public QuasiFS::RegularFile
+    class DevNull : public QuasiFS::Device
     {
     public:
         DevNull() = default;

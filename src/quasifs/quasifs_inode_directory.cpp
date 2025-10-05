@@ -1,3 +1,5 @@
+// INAA License @marecl 2025
+
 #include <map>
 #include <string>
 
@@ -8,7 +10,7 @@ namespace QuasiFS
 
     Directory::Directory()
     {
-        st.st_mode = 0000755 | S_IFDIR;
+        st.st_mode = 0000755 | QUASI_S_IFDIR;
         st.st_nlink = 0;
     }
 
@@ -76,14 +78,6 @@ namespace QuasiFS
         entries[name] = child;
         child->st.st_nlink++;
         return 0;
-    }
-
-    quasi_stat_t Directory::getattr()
-    {
-        // TODO: this and direntries
-        // st_size: arbitrary number of entries * 32
-        st.st_size = entries.size() * 32;
-        return st;
     }
 
 }

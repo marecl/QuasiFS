@@ -1,3 +1,5 @@
+// INAA License @marecl 2025
+
 #include <vector>
 
 #include "include/quasifs_inode_regularfile.h"
@@ -7,7 +9,7 @@ namespace QuasiFS
 
     RegularFile::RegularFile()
     {
-        st.st_mode = 0000755 | S_IFREG;
+        st.st_mode = 0000755 | QUASI_S_IFREG;
         st.st_nlink = 0;
     }
 
@@ -44,7 +46,7 @@ namespace QuasiFS
         return count;
     }
 
-    int RegularFile::truncate(quasi_off_t length)
+    int RegularFile::ftruncate(quasi_off_t length)
     {
         if (length < 0)
             return -QUASI_EINVAL;

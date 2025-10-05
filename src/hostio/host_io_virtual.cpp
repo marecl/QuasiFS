@@ -1,11 +1,12 @@
+// INAA License @marecl 2025
+
 #include <cstring>
 #include <filesystem>
 
-#include <sys/types.h>
-#include <sys/fcntl.h>
+#include "../../quasifs/include/quasi_sys_fcntl.h"
 
 #include "../../quasifs/include/quasi_errno.h"
-#include "../../quasifs/include/quasifs_types.h"
+#include "../../quasifs/include/quasi_types.h"
 #include "../../quasifs/include/quasifs_inode_directory.h"
 #include "../../quasifs/include/quasifs_inode_regularfile.h"
 #include "../../quasifs/include/quasifs_inode_symlink.h"
@@ -31,17 +32,16 @@ namespace HostIODriver
 
         bool exists = this->res->node != nullptr;
 
-        if (exists && (flags & O_EXCL) && (flags & O_CREAT))
+        if (exists && (flags & QUASI_O_EXCL) && (flags & QUASI_O_CREAT))
             return -QUASI_EEXIST;
 
         if (!exists)
         {
-            if ((flags & O_CREAT) == 0)
+            if ((flags & QUASI_O_CREAT) == 0)
                 return -QUASI_ENOENT;
 
-            part->touch(parent, this->res->leaf);
-            target = parent->lookup(this->res->leaf);
-            if (nullptr == target)
+            target = RegularFile::Create();
+            if (0 != part->touch(parent, this->res->leaf, target))
                 // touch failed in target directory, issue with resolve() most likely
                 return -QUASI_EFAULT;
 
@@ -50,10 +50,10 @@ namespace HostIODriver
 
         // at this point target should exist
 
-        if (flags & O_TRUNC)
+        if (flags & QUASI_O_TRUNC)
         {
             if (target->is_file())
-                std::static_pointer_cast<RegularFile>(target)->truncate(0);
+                std::static_pointer_cast<RegularFile>(target)->ftruncate(0);
             else if (target->is_dir())
                 return -QUASI_EISDIR;
             else
@@ -61,21 +61,21 @@ namespace HostIODriver
         }
 
         // if exists and is a directory, can't be opened with any kind of write
-        if (exists && (target->is_dir() || (flags & O_DIRECTORY)) && (flags & (O_TRUNC | O_RDWR | O_WRONLY)))
+        if (exists && (target->is_dir() || (flags & QUASI_O_DIRECTORY)) && (flags & (QUASI_O_TRUNC | QUASI_O_RDWR | QUASI_O_WRONLY)))
             return -QUASI_EISDIR;
 
-        if ((flags & O_DIRECTORY) && !target->is_dir())
+        if ((flags & QUASI_O_DIRECTORY) && !target->is_dir())
             // opening dirs isn't supported yet
             return -QUASI_ENOTDIR;
 
-        if (flags & (O_NOFOLLOW | O_PATH /* | O_TMPFILE */))
+        if (flags & (QUASI_O_NOFOLLOW | QUASI_O_PATH /* | QUASI_O_TMPFILE */))
         {
-            // O_TMPFILE expansion includes O_DIRECTORY
+            // QUASI_O_TMPFILE expansion includes QUASI_O_DIRECTORY
             // not implemented
             return -QUASI_EINVAL;
         }
 
-        if (flags & (O_NONBLOCK | O_SYNC | O_ASYNC | O_CLOEXEC | O_DIRECT | O_DSYNC | O_LARGEFILE | O_NOATIME | O_NOCTTY))
+        if (flags & (QUASI_O_NONBLOCK | QUASI_O_SYNC | QUASI_O_ASYNC | QUASI_O_CLOEXEC | QUASI_O_DIRECT | QUASI_O_DSYNC | QUASI_O_LARGEFILE | QUASI_O_NOATIME | QUASI_O_NOCTTY))
         {
             // unused, not affecting file manip per-se
         }
@@ -110,8 +110,7 @@ namespace HostIODriver
         // symlink counter is never increased
         sym->st.st_nlink = 1;
 
-        this->res->mountpoint->IndexInode(sym);
-        return this->res->parent->link(dst.filename(), sym);
+        return this->res->mountpoint->touch(this->res->parent, dst.filename(), sym);
     }
 
     int HostIO_Virtual::Link(const fs::path &src, const fs::path &dst)
@@ -122,7 +121,7 @@ namespace HostIODriver
         partition_ptr part = this->res->mountpoint;
         inode_ptr src_node = this->res->node;
 
-        Resolved dst_res{};
+        Resolved dst_res;
         fs::path dst_path = dst.parent_path();
         std::string dst_name = dst.filename();
 
@@ -140,26 +139,15 @@ namespace HostIODriver
     {
         if (nullptr == this->res)
             return -QUASI_EINVAL;
+        if ("." == this->res->leaf)
+            return -QUASI_EINVAL;
 
         if (nullptr == this->res->node)
             return -QUASI_ENOENT;
 
-        if (this->res->node->is_dir())
-            return -QUASI_EISDIR;
-
-        // EINVAL on . as last element
-
+        partition_ptr part = this->res->mountpoint;
         dir_ptr parent = this->res->parent;
-        inode_ptr node = this->res->node;
-
-        // probably redundant
-        if (inode_ptr node_tmp = parent->lookup(this->res->leaf); node_tmp != node)
-            LogError("Resolved to different inode (0x{:x}) than parent holds (0x{:x})", node->st.st_ino, node_tmp ? node_tmp->st.st_ino : -1);
-
-        if (int unlink_status = this->res->parent->unlink(this->res->leaf); unlink_status != 0)
-            return unlink_status;
-
-        return res->mountpoint->rmInode(res->node);
+        return part->unlink(parent, this->res->leaf);
     }
 
     int HostIO_Virtual::Flush(const int fd)
@@ -170,8 +158,15 @@ namespace HostIODriver
 
     int HostIO_Virtual::FSync(const int fd)
     {
-        // not applicable
-        return 0;
+        if (nullptr == handle)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        return handle->node->fsync();
     }
 
     int HostIO_Virtual::Truncate(const fs::path &path, quasi_size_t size)
@@ -193,7 +188,7 @@ namespace HostIODriver
         if (host_bound)
             return std::static_pointer_cast<RegularFile>(handle->node)->MockTruncate(size);
         else
-            return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
+            return std::static_pointer_cast<RegularFile>(handle->node)->ftruncate(size);
     }
 
     int HostIO_Virtual::FTruncate(const int fd, quasi_size_t size)
@@ -215,7 +210,7 @@ namespace HostIODriver
         if (host_bound)
             return std::static_pointer_cast<RegularFile>(handle->node)->MockTruncate(size);
         else
-            return std::static_pointer_cast<RegularFile>(handle->node)->truncate(size);
+            return std::static_pointer_cast<RegularFile>(handle->node)->ftruncate(size);
     }
 
     quasi_off_t HostIO_Virtual::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
@@ -231,9 +226,9 @@ namespace HostIODriver
         auto ptr = &handle->pos;
 
         quasi_off_t new_ptr =
-            (origin == SeekOrigin::ORIGIN) * offset +
-            (origin == SeekOrigin::CURRENT) * (*(ptr) + offset) +
-            (origin == SeekOrigin::END) * (node->st.st_size + offset);
+            (SeekOrigin::ORIGIN == origin) * offset +
+            (SeekOrigin::CURRENT == origin) * (*(ptr) + offset) +
+            (SeekOrigin::END == origin) * (node->st.st_size + offset);
 
         if (new_ptr < 0)
             return -QUASI_EINVAL;
@@ -330,7 +325,7 @@ namespace HostIODriver
         if (parent->mounted_root)
             return -QUASI_EBUSY;
 
-        if (int unlink_status = parent->unlink(this->res->leaf); unlink_status != 0)
+        if (int unlink_status = res->mountpoint->rmdir(parent, this->res->leaf); unlink_status != 0)
             return unlink_status;
 
         auto target_nlink = res->node->st.st_nlink;
@@ -340,7 +335,7 @@ namespace HostIODriver
             return -QUASI_ENOTEMPTY;
         }
 
-        return res->mountpoint->rmInode(res->node);
+        return 0;
     }
 
     int HostIO_Virtual::Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf)
@@ -371,5 +366,31 @@ namespace HostIODriver
         memcpy(statbuf, &node->st, sizeof(quasi_stat_t));
 
         return 0;
+    }
+
+    int HostIO_Virtual::Chmod(const fs::path &path, quasi_mode_t mode)
+    {
+        if (nullptr == this->res)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = this->res->node;
+
+        if (nullptr == node)
+            return -QUASI_ENOENT;
+
+        return Partition::chmod(node, mode);
+    }
+
+    int HostIO_Virtual::FChmod(const int fd, quasi_mode_t mode)
+    {
+        if (nullptr == this->handle)
+            return -QUASI_EINVAL;
+
+        inode_ptr node = this->handle->node;
+
+        if (nullptr == node)
+            return -QUASI_EBADF;
+
+        return Partition::chmod(node, mode);
     }
 }

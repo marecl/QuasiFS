@@ -1,6 +1,6 @@
-#include <filesystem>
+// INAA License @marecl 2025
 
-#include <sys/types.h>
+#include <filesystem>
 
 #include "../../log.h"
 #include "host_io_base.h"
@@ -29,7 +29,9 @@ namespace HostIODriver
     quasi_ssize_t HostIO_Base::PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset) { STUB(); }
     int HostIO_Base::MKDir(const fs::path &path, quasi_mode_t mode) { STUB(); }
     int HostIO_Base::RMDir(const fs::path &path) { STUB(); }
-    int HostIO_Base::Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf) { STUB(); }
-    int HostIO_Base::FStat(const int fd, QuasiFS::quasi_stat_t *statbuf) { STUB(); }
+    int HostIO_Base::Stat(const fs::path &path, quasi_stat_t *statbuf) { STUB(); }
+    int HostIO_Base::FStat(const int fd, quasi_stat_t *statbuf) { STUB(); }
+    int HostIO_Base::Chmod(const fs::path &path, quasi_mode_t mode) { STUB(); }
+    int HostIO_Base::FChmod(const int fd, quasi_mode_t mode) { STUB(); }
 
 }

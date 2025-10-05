@@ -1,4 +1,6 @@
-// errno
+// INAA License @marecl 2025
+
+#pragma once
 
 #include <cstdint>
 

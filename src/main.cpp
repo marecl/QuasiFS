@@ -1,10 +1,6 @@
-#include "quasifs/include/quasifs.h"
-#include "quasifs/include/quasifs_inode.h"
-#include "quasifs/include/quasifs_inode_directory.h"
-#include "quasifs/include/quasifs_inode_regularfile.h"
-#include "quasifs/include/quasifs_partition.h"
+// INAA License @marecl 2025
 
-#include "dev/include/dev_std.h"
+#include "quasifs/include/quasifs.h"
 
 #include "log.h"
 #include "tests.h"
@@ -35,7 +31,7 @@ int main()
   Test(vh);
 
   Log("<<<< PRINTING FS TREE >>>>");
- printTree(vh.GetRoot(), "/", 0);
+  printTree(vh.GetRoot(), "/", 0);
 
   return 0;
 }

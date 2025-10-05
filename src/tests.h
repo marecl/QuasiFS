@@ -1,13 +1,17 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include "quasifs/include/quasifs_inode_directory.h"
 #include "quasifs/include/quasifs_inode_regularfile.h"
 #include "quasifs/include/quasifs_inode_symlink.h"
 #include "quasifs/include/quasifs_partition.h"
-
 #include "quasifs/include/quasifs.h"
+
+#include "quasifs/include/quasi_sys_fcntl.h"
+
+#include "../../dev/include/dev_std.h"
 #include "log.h"
-#include <sys/fcntl.h>
 
 using namespace QuasiFS;
 
@@ -42,9 +46,9 @@ void _printTree(const inode_ptr &node, const std::string &name, int depth)
     else
         depth--;
 
-    if (name == ".")
+    if ("." == name)
         return;
-    if (name == "..")
+    if (".." == name)
         return;
 
     if (node->is_dir())
@@ -105,14 +109,68 @@ void TestDirOps(QFS &qfs);
 // Stat
 void TestStat(QFS &qfs)
 {
-    qfs.MKDir("/mount");
+    qfs.Operation.MKDir("/mount");
 
-    partition_ptr part = Partition::Create("", MountOptions::MOUNT_RW);
-    qfs.Mount("/mount", part);
+    partition_ptr part = Partition::Create();
+    qfs.Mount("/mount", part, MountOptions::MOUNT_RW);
 
-    qfs.Creat("/mount/file");
+    qfs.Operation.Creat("/mount/file");
 }
 void TestHostStat(QFS &qfs) UNIMPLEMENTED();
+
+// /dev
+void TestDev(QFS &qfs)
+{
+    LogTest("Test character devices");
+
+    partition_ptr dev = Partition::Create();
+    qfs.Operation.MKDir("/dev");
+    qfs.Mount("/dev", dev, MountOptions::MOUNT_RW);
+    uint8_t buffer[16];
+
+    //
+    // stdout
+    //
+    auto stdout_device = std::make_shared<Devices::DevStdout>();
+    qfs.Operation.MKDir("/dev/fd"); // mimic real placement
+    qfs.ForceInsert("/dev/fd", "1", stdout_device);
+    qfs.Operation.LinkSymbolic("/dev/fd/1", "/dev/stdout");
+    int stdout_fd = qfs.Operation.Open("/dev/stdout", QUASI_O_WRONLY);
+    const char teststr[] = "\t\t\t\tIf you're reading this, stdout works as expected\n";
+    auto teststr_len = strlen(teststr);
+    if (int bw = qfs.Operation.Write(stdout_fd, teststr, teststr_len); bw == teststr_len)
+        LogSuccess("Written {} bytes to stdout", bw);
+    else
+        LogError("Written {}/{} bytes to stdout", bw, teststr_len);
+    qfs.Operation.Close(stdout_fd);
+
+    //
+    // /dev/random
+    //
+    auto random_device = std::make_shared<Devices::DevRandom>();
+    qfs.ForceInsert("/dev", "random", random_device);
+    int rand_fd = qfs.Operation.Open("/dev/random", QUASI_O_RDONLY);
+    if (int br = qfs.Operation.Read(rand_fd, buffer, 16); 16 == br)
+    {
+        LogSuccess("Read {} bytes from /dev/random", br);
+    }
+    else
+        LogError("Read {}/{} bytes from /dev/random", br, 16);
+    for (auto i : buffer)
+    {
+        if (0xAA != i)
+        {
+            LogError("/dev/random didn't return \"random\" value");
+            break;
+        }
+    }
+    qfs.Operation.Close(rand_fd);
+
+    //
+    // End
+    //
+    qfs.Unmount("/dev");
+}
 
 void Test(QFS &qfs)
 {
@@ -155,6 +213,9 @@ void Test(QFS &qfs)
     TestStat(qfs);
     TestHostStat(qfs);
 
+    // /dev
+    TestDev(qfs);
+
     Log("");
     Log("Tests complete");
     Log("");
@@ -174,9 +235,9 @@ void TestTouchUnlinkFile(QFS &qfs)
 {
     LogTest("Create a file");
     const fs::path path = "/testfile";
-    Resolved res{};
+    Resolved res;
 
-    if (int status = qfs.Creat(path); status >= 0)
+    if (int status = qfs.Operation.Creat(path); status >= 0)
         LogSuccess("Touched {}", path.string());
     else
         LogError("touch {} : {}", path.string(), status);
@@ -189,7 +250,7 @@ void TestTouchUnlinkFile(QFS &qfs)
     if (res.parent != qfs.GetRoot())
         LogError("Wrong parent");
 
-    if (int status = qfs.Unlink(path); status == 0)
+    if (int status = qfs.Operation.Unlink(path); status == 0)
         LogSuccess("Unlinked");
     else
         LogError("unlink failed: {}", status);
@@ -204,9 +265,9 @@ void TestMkRmdir(QFS &qfs)
 {
     LogTest("Create a directory");
     fs::path path = "/testdir";
-    Resolved res{};
+    Resolved res;
 
-    if (int status = qfs.MKDir(path); status == 0)
+    if (int status = qfs.Operation.MKDir(path); status == 0)
         LogSuccess("mkdir'd {}", path.string());
     else
         LogError("mkdir {} : {}", path.string(), status);
@@ -232,7 +293,7 @@ void TestMkRmdir(QFS &qfs)
     auto qw = res.node;
     auto qwe = qfs.GetRoot();
 
-    if (int status = qfs.RMDir(path); status == 0)
+    if (int status = qfs.Operation.RMDir(path); status == 0)
         LogSuccess("rmdir'd");
     else
         LogError("rmdir failed");
@@ -242,10 +303,10 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("dir not removed: {}", status);
 
-    qfs.MKDir("/dir1");
+    qfs.Operation.MKDir("/dir1");
     path = "/dir1/dir2";
 
-    if (int status = qfs.MKDir(path); status == 0)
+    if (int status = qfs.Operation.MKDir(path); status == 0)
         LogSuccess("mkdir'd {}", path.string());
     else
         LogError("mkdir {} : {}", path.string(), status);
@@ -255,7 +316,7 @@ void TestMkRmdir(QFS &qfs)
     else
         LogError("Can't resolve: {}", status);
 
-    if (int status = qfs.RMDir(path); status == 0)
+    if (int status = qfs.Operation.RMDir(path); status == 0)
         LogSuccess("rmdir'd");
     else
         LogError("rmdir failed");
@@ -281,10 +342,10 @@ void TestMount(QFS &qfs)
         LogError("Can't create partition object");
     }
 
-    Resolved res{};
+    Resolved res;
 
-    qfs.MKDir("/dummy");
-    qfs.MKDir("/dummy/mount");
+    qfs.Operation.MKDir("/dummy");
+    qfs.Operation.MKDir("/dummy/mount");
 
     if (int status = qfs.Resolve("/dummy/mount", res); status == 0)
         LogSuccess("mkdir'd /dummy/mount");
@@ -368,8 +429,8 @@ void TestMount(QFS &qfs)
     else
         LogError("Can't unmount: {}", status);
 
-    qfs.RMDir("/dummy/mount");
-    qfs.RMDir("/dummy");
+    qfs.Operation.RMDir("/dummy/mount");
+    qfs.Operation.RMDir("/dummy");
 }
 
 void TestMountFileRetention(QFS &qfs)
@@ -378,14 +439,14 @@ void TestMountFileRetention(QFS &qfs)
 
     auto part = Partition::Create();
 
-    qfs.MKDir("/mount");
+    qfs.Operation.MKDir("/mount");
 
-    qfs.Creat("/mount/dummy1"); // dummy files to shift fileno
-    qfs.Creat("/mount/dummy2");
-    qfs.Creat("/mount/dummy3");
-    qfs.Creat("/mount/dummy4");
-    qfs.Creat("/mount/testfile");
-    qfs.MKDir("/mount/testdir");
+    qfs.Operation.Creat("/mount/dummy1"); // dummy files to shift fileno
+    qfs.Operation.Creat("/mount/dummy2");
+    qfs.Operation.Creat("/mount/dummy3");
+    qfs.Operation.Creat("/mount/dummy4");
+    qfs.Operation.Creat("/mount/testfile");
+    qfs.Operation.MKDir("/mount/testdir");
 
     Resolved rfile{};
     Resolved rdir{};
@@ -423,8 +484,8 @@ void TestMountFileRetention(QFS &qfs)
         LogError("Pre-mount directory preserved (if 0), or error (if not ENOENT): {}", status_dir);
     }
 
-    qfs.Creat("/mount/testfile_mnt");
-    qfs.MKDir("/mount/testdir_mnt");
+    qfs.Operation.Creat("/mount/testfile_mnt");
+    qfs.Operation.MKDir("/mount/testdir_mnt");
 
     if (int status_file = qfs.Resolve("/mount/testfile_mnt", rfile); 0 == status_file)
         LogSuccess("Test file created (mount)");
@@ -490,42 +551,42 @@ void TestMountRO(QFS &qfs)
     const char *rostr = "RO PREEXISTING CONTENT";
     auto rostr_len = strlen(rostr);
 
-    qfs.MKDir("/ro");
+    qfs.Operation.MKDir("/ro");
 
     if (int mount_status = qfs.Mount("/ro", ropart, MountOptions::MOUNT_RW); mount_status == 0)
         LogSuccess("Mounted /ro as RW partition");
     else
         LogError("Can't mount /ro as RW: {}", mount_status);
 
-    qfs.MKDir("/ro/roo");
+    qfs.Operation.MKDir("/ro/roo");
 
-    int existing_fd = qfs.Creat("/ro/exist");
-    if (int bw = qfs.Write(existing_fd, rostr, rostr_len); bw != rostr_len)
+    int existing_fd = qfs.Operation.Creat("/ro/exist");
+    if (int bw = qfs.Operation.Write(existing_fd, rostr, rostr_len); bw != rostr_len)
         LogError("Can't write test data: {} out of {} written", bw, rostr_len);
-    qfs.Close(existing_fd);
+    qfs.Operation.Close(existing_fd);
 
     if (int mount_status = qfs.Mount("/ro", ropart, MountOptions::MOUNT_NOOPT | MountOptions::MOUNT_REMOUNT); mount_status == 0)
         LogSuccess("Mounted /ro as read-only partition");
     else
         LogError("Can't mount /ro as RO: {}", mount_status);
 
-    if (int fd = qfs.Creat("/ro/bad"); fd == -QUASI_EROFS)
+    if (int fd = qfs.Operation.Creat("/ro/bad"); fd == -QUASI_EROFS)
         LogSuccess("Can't create a file in RO partition");
     else
     {
         LogError("Unexpected return from creat(): {}", fd);
-        Resolved res{};
+        Resolved res;
         if (int resolve_status = qfs.Resolve("/ro/bad", res); resolve_status == 0)
             LogError("Created a file in RO partition");
     }
 
-    int fd = qfs.Open("/ro/exist", 0);
+    int fd = qfs.Operation.Open("/ro/exist", 0);
     if (fd >= 0)
         LogSuccess("Preexisting file open. fd={}", fd);
     else
         LogError("Can't open file. Error: {}", fd);
     char buffer[128]{0};
-    int rd = qfs.Read(fd, buffer, 128);
+    int rd = qfs.Operation.Read(fd, buffer, 128);
 
     if (rd >= 0)
         LogSuccess("Success: {} bytes read from preexisting file", rd);
@@ -546,9 +607,9 @@ void TestStLinkFile(QFS &qfs)
 {
     LogTest("File link counter");
 
-    Resolved res{};
+    Resolved res;
 
-    qfs.Creat("/file");
+    qfs.Operation.Creat("/file");
     qfs.Resolve("/file", res);
 
     file_ptr f = std::reinterpret_pointer_cast<RegularFile>(res.node);
@@ -560,7 +621,7 @@ void TestStLinkFile(QFS &qfs)
     else
         LogError("New file link {} != 1", *nlink);
 
-    if (int status = qfs.Link("/file", "/file2"); 0 == status)
+    if (int status = qfs.Operation.Link("/file", "/file2"); 0 == status)
         LogSuccess("File linked");
     else
         LogError("Link existing file failed");
@@ -570,7 +631,7 @@ void TestStLinkFile(QFS &qfs)
     else
         LogError("New file link {} != 2", *nlink);
 
-    if (int status = qfs.Unlink("/file"); 0 == status)
+    if (int status = qfs.Operation.Unlink("/file"); 0 == status)
         LogSuccess("File unlinked");
     else
         LogError("Unlink OG file failed: {}", status);
@@ -580,7 +641,7 @@ void TestStLinkFile(QFS &qfs)
     else
         LogError("New file link {} != 1", *nlink);
 
-    if (int status = qfs.Unlink("/file2"); 0 == status)
+    if (int status = qfs.Operation.Unlink("/file2"); 0 == status)
         LogSuccess("File unlinked");
     else
         LogError("Unlink new-linked file failed: {}", status);
@@ -602,9 +663,9 @@ void TestStLinkDir(QFS &qfs)
 {
     LogTest("Dir link counter");
 
-    Resolved res{};
+    Resolved res;
 
-    qfs.MKDir("/dir");
+    qfs.Operation.MKDir("/dir");
     qfs.Resolve("/dir", res);
 
     dir_ptr f = std::reinterpret_pointer_cast<Directory>(res.node);
@@ -616,12 +677,12 @@ void TestStLinkDir(QFS &qfs)
     else
         LogError("New dir link {} != 2", *nlink);
 
-    if (int status = qfs.Link("/dir", "/dir2"); -QUASI_EPERM == status)
+    if (int status = qfs.Operation.Link("/dir", "/dir2"); -QUASI_EPERM == status)
         LogSuccess("Dir can't be linked");
     else
         LogError("Dir linked: {}", status);
 
-    if (int status = qfs.MKDir("/dir/dir2"); 0 == status)
+    if (int status = qfs.Operation.MKDir("/dir/dir2"); 0 == status)
         LogSuccess("Subdir created");
     else
         LogError("Can't create subdir");
@@ -631,7 +692,7 @@ void TestStLinkDir(QFS &qfs)
     else
         LogError("Dir with subdir nlink {} != 3", *nlink);
 
-    if (int status = qfs.RMDir("/dir/dir2"); 0 == status)
+    if (int status = qfs.Operation.RMDir("/dir/dir2"); 0 == status)
         LogSuccess("subdir unlinked");
     else
         LogError("Unlink subdir failed: {}", status);
@@ -641,7 +702,7 @@ void TestStLinkDir(QFS &qfs)
     else
         LogError("Dir nlink didn't decrease after removing subdir nlink: {} != 2", *nlink);
 
-    if (int status = qfs.RMDir("/dir"); 0 == status)
+    if (int status = qfs.Operation.RMDir("/dir"); 0 == status)
         LogSuccess("subdir unlinked");
     else
         LogError("Unlink subdir failed: {}", status);
@@ -669,11 +730,11 @@ void TestSymlinkFile(QFS &qfs)
 {
     LogTest("Symlinking files");
 
-    qfs.Close(qfs.Creat("/link_source_file"));
-    qfs.MKDir("/oneup");
-    qfs.Close(qfs.Creat("/oneup/link_source_file_up"));
+    qfs.Operation.Close(qfs.Operation.Creat("/link_source_file"));
+    qfs.Operation.MKDir("/oneup");
+    qfs.Operation.Close(qfs.Operation.Creat("/oneup/link_source_file_up"));
 
-    Resolved res{};
+    Resolved res;
 
     int resolve_status = qfs.Resolve("/link_source_file", res);
     const file_ptr src_file = std::static_pointer_cast<RegularFile>(res.node);
@@ -682,7 +743,7 @@ void TestSymlinkFile(QFS &qfs)
     file_ptr dst_file;
 
     // link, same directory
-    qfs.LinkSymbolic("/link_source_file", "/link_dest_file");
+    qfs.Operation.LinkSymbolic("/link_source_file", "/link_dest_file");
     resolve_status = qfs.Resolve("/link_dest_file", res);
     dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file == dst_file)
@@ -691,7 +752,7 @@ void TestSymlinkFile(QFS &qfs)
         LogError("Same directory symlink failed: Resolve returned {}", resolve_status);
 
     // link, same directory, 1 level deep
-    qfs.LinkSymbolic("/oneup/link_source_file_up", "/oneup/link_dest_file_up");
+    qfs.Operation.LinkSymbolic("/oneup/link_source_file_up", "/oneup/link_dest_file_up");
     resolve_status = qfs.Resolve("/oneup/link_dest_file_up", res);
     dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file_up == dst_file)
@@ -700,7 +761,7 @@ void TestSymlinkFile(QFS &qfs)
         LogError("Same directory 1 level deep symlink failed: Resolve returned {}", resolve_status);
 
     // link, same directory, 1 level deep
-    qfs.LinkSymbolic("/oneup/link_source_file_up", "/link_dest_file_to_down");
+    qfs.Operation.LinkSymbolic("/oneup/link_source_file_up", "/link_dest_file_to_down");
     resolve_status = qfs.Resolve("/link_dest_file_to_down", res);
     dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file_up == dst_file)
@@ -709,7 +770,7 @@ void TestSymlinkFile(QFS &qfs)
         LogError("Same directory up->down failed: Resolve returned {}", resolve_status);
 
     // link, same directory, 1 level deep
-    qfs.LinkSymbolic("/link_source_file", "/oneup/link_dest_file_to_up");
+    qfs.Operation.LinkSymbolic("/link_source_file", "/oneup/link_dest_file_to_up");
     resolve_status = qfs.Resolve("/oneup/link_dest_file_to_up", res);
     dst_file = std::static_pointer_cast<RegularFile>(res.node);
     if (src_file == dst_file)
@@ -722,11 +783,11 @@ void TestSymlinkDir(QFS &qfs)
 {
     LogTest("Symlinking directories");
 
-    qfs.MKDir("/link_source_dir");
-    qfs.MKDir("/oneup");
-    qfs.MKDir("/oneup/link_source_dir_up");
+    qfs.Operation.MKDir("/link_source_dir");
+    qfs.Operation.MKDir("/oneup");
+    qfs.Operation.MKDir("/oneup/link_source_dir_up");
 
-    Resolved res{};
+    Resolved res;
 
     int resolve_status = qfs.Resolve("/link_source_dir", res);
     const dir_ptr src_dir = std::static_pointer_cast<Directory>(res.node);
@@ -735,7 +796,7 @@ void TestSymlinkDir(QFS &qfs)
     dir_ptr dst_dir;
 
     // link, same directory
-    qfs.LinkSymbolic("/link_source_dir", "/link_dest_dir");
+    qfs.Operation.LinkSymbolic("/link_source_dir", "/link_dest_dir");
     resolve_status = qfs.Resolve("/link_dest_dir", res);
     dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir == dst_dir)
@@ -744,7 +805,7 @@ void TestSymlinkDir(QFS &qfs)
         LogError("Same directory symlink failed: Resolve returned {}", resolve_status);
 
     // link, same directory, 1 level deep
-    qfs.LinkSymbolic("/oneup/link_source_dir_up", "/oneup/link_dest_dir_up");
+    qfs.Operation.LinkSymbolic("/oneup/link_source_dir_up", "/oneup/link_dest_dir_up");
     resolve_status = qfs.Resolve("/oneup/link_dest_dir_up", res);
     dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir_up == dst_dir)
@@ -753,7 +814,7 @@ void TestSymlinkDir(QFS &qfs)
         LogError("Same directory 1 level deep symlink failed: Resolve returned {}", resolve_status);
 
     // link, same directory, 1 level deep
-    qfs.LinkSymbolic("/oneup/link_source_dir_up", "/link_dest_dir_to_down");
+    qfs.Operation.LinkSymbolic("/oneup/link_source_dir_up", "/link_dest_dir_to_down");
     resolve_status = qfs.Resolve("/link_dest_dir_to_down", res);
     dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir_up == dst_dir)
@@ -762,7 +823,7 @@ void TestSymlinkDir(QFS &qfs)
         LogError("Same directory up->down failed: Resolve returned {}", resolve_status);
 
     // link, same directory, 1 level deep
-    qfs.LinkSymbolic("/link_source_dir", "/oneup/link_dest_dir_to_up");
+    qfs.Operation.LinkSymbolic("/link_source_dir", "/oneup/link_dest_dir_to_up");
     resolve_status = qfs.Resolve("/oneup/link_dest_dir_to_up", res);
     dst_dir = std::static_pointer_cast<Directory>(res.node);
     if (src_dir == dst_dir)
@@ -775,22 +836,22 @@ void TestSymlinkCursed(QFS &qfs)
 {
     LogTest("Cursed links");
 
-    qfs.Creat("/src_file");
-    qfs.MKDir("/layer1");
-    qfs.MKDir("/layer1/layer2");
-    qfs.MKDir("/layer1/layer2/layer3");
-    qfs.MKDir("/layer1/layer2/layer3/layer4");
+    qfs.Operation.Creat("/src_file");
+    qfs.Operation.MKDir("/layer1");
+    qfs.Operation.MKDir("/layer1/layer2");
+    qfs.Operation.MKDir("/layer1/layer2/layer3");
+    qfs.Operation.MKDir("/layer1/layer2/layer3/layer4");
 
-    Resolved res{};
+    Resolved res;
     int resolve_status = qfs.Resolve("/src_file", res);
     const file_ptr src_file = std::static_pointer_cast<RegularFile>(res.node);
-    if (src_file == nullptr)
+    if (nullptr == src_file)
         LogError("Didn't create test file");
     file_ptr dst_file;
 
     // linking directories
-    qfs.LinkSymbolic("/layer1/layer2/layer3/layer4", "/l4");
-    qfs.LinkSymbolic("/src_file", "/l4/sos");
+    qfs.Operation.LinkSymbolic("/layer1/layer2/layer3/layer4", "/l4");
+    qfs.Operation.LinkSymbolic("/src_file", "/l4/sos");
     resolve_status = qfs.Resolve("/l4/sos", res);
     dst_file = std::static_pointer_cast<RegularFile>(res.node);
 
@@ -800,7 +861,7 @@ void TestSymlinkCursed(QFS &qfs)
         LogError("File symlinked to symlinked directory tree: Resolve returned {}", resolve_status);
 
     // linking directories
-    qfs.LinkSymbolic("/l4/sos", "/l4/sos2");
+    qfs.Operation.LinkSymbolic("/l4/sos", "/l4/sos2");
     resolve_status = qfs.Resolve("/l4/sos2", res);
     dst_file = std::static_pointer_cast<RegularFile>(res.node);
 
@@ -809,8 +870,8 @@ void TestSymlinkCursed(QFS &qfs)
     else
         LogError("File symlinked to file symlinked in symlinked directory tree: Resolve returned {}", resolve_status);
 
-    qfs.LinkSymbolic("/layer1/layer2/layer3/layer4", "/layer1/layer2/early4");
-    qfs.LinkSymbolic("/src_file", "/layer1/layer2/early4/early_file");
+    qfs.Operation.LinkSymbolic("/layer1/layer2/layer3/layer4", "/layer1/layer2/early4");
+    qfs.Operation.LinkSymbolic("/src_file", "/layer1/layer2/early4/early_file");
     resolve_status = qfs.Resolve("/layer1/layer2/early4/early_file", res);
     dst_file = std::static_pointer_cast<RegularFile>(res.node);
 
@@ -820,24 +881,24 @@ void TestSymlinkCursed(QFS &qfs)
         LogError("File symlinked to file symlinked in a directory symlinked within directory tree: Resolve returned {}", resolve_status);
 
     // loops
-    qfs.MKDir("/tmp");
-    qfs.LinkSymbolic("/tmp/loopLinkDir", "/tmp/loopLinkDir");
+    qfs.Operation.MKDir("/tmp");
+    qfs.Operation.LinkSymbolic("/tmp/loopLinkDir", "/tmp/loopLinkDir");
     resolve_status = qfs.Resolve("/tmp/loopLinkDir", res);
     if (-QUASI_ELOOP == resolve_status)
         LogSuccess("Symlink loop safeguard works for directories");
     else
         LogError("Symlink loop safeguard for directories didn't trigger: Resolve returned {}", resolve_status);
 
-    qfs.LinkSymbolic("/tmp/loopLinkFile", "/tmp/loopLinkFile");
+    qfs.Operation.LinkSymbolic("/tmp/loopLinkFile", "/tmp/loopLinkFile");
     resolve_status = qfs.Resolve("/tmp/loopLinkFile", res);
     if (-QUASI_ELOOP == resolve_status)
         LogSuccess("Symlink loop safeguard works for files");
     else
         LogError("Symlink loop safeguard for files didn't trigger: Resolve returned {}", resolve_status);
 
-    qfs.Creat("/missing_file");
-    qfs.LinkSymbolic("/missing_file", "/dangling_file");
-    qfs.Unlink("/missing_file");
+    qfs.Operation.Creat("/missing_file");
+    qfs.Operation.LinkSymbolic("/missing_file", "/dangling_file");
+    qfs.Operation.Unlink("/missing_file");
     resolve_status = qfs.Resolve("/dangling_file", res);
 
     if (-QUASI_ENOENT == resolve_status)
@@ -845,10 +906,10 @@ void TestSymlinkCursed(QFS &qfs)
     else
         LogError("Resolving dangling symlink returns wrong error: {}", resolve_status);
 
-    qfs.MKDir("/dir1");
-    qfs.MKDir("/dir2");
-    qfs.Creat("/dir2/XD");
-    qfs.LinkSymbolic("/dir2", "/dir1/missing");
+    qfs.Operation.MKDir("/dir1");
+    qfs.Operation.MKDir("/dir2");
+    qfs.Operation.Creat("/dir2/XD");
+    qfs.Operation.LinkSymbolic("/dir2", "/dir1/missing");
 
     resolve_status = qfs.Resolve("/dir1/missing/XD", res);
     if (0 == resolve_status)
@@ -856,7 +917,7 @@ void TestSymlinkCursed(QFS &qfs)
     else
         LogError("Didn't resolve file in directory symlinked inside a tree: ", resolve_status);
 
-    if (0 != qfs.Unlink("/dir1/missing"))
+    if (0 != qfs.Operation.Unlink("/dir1/missing"))
     {
         LogError("Unlink should remove symlink when path is not preceeded with /");
     }
@@ -869,8 +930,8 @@ void TestSymlinkCursed(QFS &qfs)
         LogError("Resolving dangling symlink inside a tree returns wrong error: {}", resolve_status);
 
     //
-    qfs.LinkSymbolic("/dir2/XD", "/unlinked_link");
-    if (0 != qfs.Unlink("/unlinked_link"))
+    qfs.Operation.LinkSymbolic("/dir2/XD", "/unlinked_link");
+    if (0 != qfs.Operation.Unlink("/unlinked_link"))
     {
         LogError("Didn't unlink a symlink pointing at a file");
     }
@@ -891,65 +952,65 @@ void TestFileOpen(QFS &qfs)
 {
     LogTest("File open/close");
 
-    Resolved res{};
+    Resolved res;
 
-    if (int status = qfs.Open("/file_open", 0); -QUASI_ENOENT == status)
+    if (int status = qfs.Operation.Open("/file_open", 0); -QUASI_ENOENT == status)
     {
-        LogSuccess("nonexistent file, O_READ");
-        qfs.Close(status);
+        LogSuccess("nonexistent file, QUASI_O_READ");
+        qfs.Operation.Close(status);
     }
     else
         LogError("O_READ, nonexistent file with trailing /: {}", status);
 
-    if (int status = qfs.Open("/file_open", O_CREAT); 0 <= status)
+    if (int status = qfs.Operation.Open("/file_open", QUASI_O_CREAT); 0 <= status)
     {
-        LogSuccess("nonexistent file, O_READ | O_CREAT");
-        qfs.Close(status);
+        LogSuccess("nonexistent file, QUASI_O_READ | QUASI_O_CREAT");
+        qfs.Operation.Close(status);
     }
     else
-        LogError("O_READ | O_CREAT, nonexistent file: {}", status);
+        LogError("O_READ | QUASI_O_CREAT, nonexistent file: {}", status);
 
     //
     if (-QUASI_ENOENT == qfs.Resolve("/file_open", res))
         LogError("O_CREAT didn't create the file");
     //
 
-    if (int status = qfs.Open("/file_open/", 0); -QUASI_ENOTDIR == status)
+    if (int status = qfs.Operation.Open("/file_open/", 0); -QUASI_ENOTDIR == status)
     {
-        LogSuccess("nonexistent file with trailing /, O_READ");
-        qfs.Close(status);
+        LogSuccess("nonexistent file with trailing /, QUASI_O_READ");
+        qfs.Operation.Close(status);
     }
     else
         LogError("O_READ, nonexistent file with trailing /: {}", status);
 
-    if (int status = qfs.Open("/file_open", O_RDWR); 0 <= status)
+    if (int status = qfs.Operation.Open("/file_open", QUASI_O_RDWR); 0 <= status)
     {
-        LogSuccess("existing file, O_RDWR");
-        qfs.Close(status);
+        LogSuccess("existing file, QUASI_O_RDWR");
+        qfs.Operation.Close(status);
     }
     else
         LogError("O_RDWR, existing file: {}", status);
 
     // Edge case - undefined in POSIX
     // We can open the file for reading only and truncate it anyway
-    if (int status = qfs.Open("/file_open", O_RDONLY | O_TRUNC); 0 <= status)
+    if (int status = qfs.Operation.Open("/file_open", QUASI_O_RDONLY | QUASI_O_TRUNC); 0 <= status)
     {
-        LogSuccess("existing file, O_RDONLY | O_TRUNC");
-        qfs.Close(status);
+        LogSuccess("existing file, QUASI_O_RDONLY | QUASI_O_TRUNC");
+        qfs.Operation.Close(status);
     }
     else
-        LogError("O_RDONLY | O_TRUNC, existing file: {}", status);
+        LogError("O_RDONLY | QUASI_O_TRUNC, existing file: {}", status);
 }
 
 void TestFileOps(QFS &qfs)
 {
     LogTest("File operations");
 
-    int fd = qfs.Creat("/rwtest");
-    Resolved res{};
+    int fd = qfs.Operation.Creat("/rwtest");
+    Resolved res;
     qfs.Resolve("/rwtest", res);
 
-    if (res.node == nullptr)
+    if (nullptr == res.node)
     {
         LogError("Didn't create /rwtest file");
     }
@@ -963,89 +1024,89 @@ void TestFileOps(QFS &qfs)
     auto teststr_len = strlen(teststr);
     auto overw_len = strlen(overw);
 
-    if (int bw = qfs.Write(fd, teststr, teststr_len); bw == teststr_len)
+    if (int bw = qfs.Operation.Write(fd, teststr, teststr_len); bw == teststr_len)
         LogSuccess("Written test string 1 to file.");
     else
         LogError("Didn't write test string 1: {} out of {}", bw, teststr_len);
-    if (int bw = qfs.PWrite(fd, overw, overw_len, teststr_len - 5); bw == overw_len)
+    if (int bw = qfs.Operation.PWrite(fd, overw, overw_len, teststr_len - 5); bw == overw_len)
         LogSuccess("Written test string 1 to file.");
     else
         LogError("Didn't write test string 1: {} out of {}", bw, teststr_len);
 
-    qfs.Close(fd);
+    qfs.Operation.Close(fd);
 
     // Readback
 
-    fd = qfs.Open("/rwtest", O_RDWR);
+    fd = qfs.Operation.Open("/rwtest", QUASI_O_RDWR);
     memset(buffer, 0, 1024);
-    if (int br = qfs.Read(fd, buffer, 1024); br == teststr_len + overw_len - 5)
-        LogSuccess("Read test string:\n[START]{}[EOF]", buffer);
+    if (int br = qfs.Operation.Read(fd, buffer, 1024); teststr_len + overw_len - 5 == br)
+        LogSuccess("Read test string:\n\t\t\t\t[START]{}[EOF]", buffer);
     else
         LogError("Didn't read test string 1: {} out of {}", br, teststr_len);
 
-    if (int status = memcmp(buffer, teststr, teststr_len - 5); status != 0)
+    if (int status = memcmp(buffer, teststr, teststr_len - 5); 0 != status)
     {
         LogError("Invalid readback - first string");
     }
-    if (int status = memcmp(buffer + teststr_len - 5, overw, overw_len); status != 0)
+    if (int status = memcmp(buffer + teststr_len - 5, overw, overw_len); 0 != status)
     {
         LogError("Invalid readback - overwriting string");
     }
 
-    if (int status = qfs.FTruncate(fd, 15); status == 0 && *size == 15)
+    if (int status = qfs.Operation.FTruncate(fd, 15); 0 == status && 15 == *size)
         LogSuccess("File truncated to {} bytes", *size);
     else
         LogError("Can't truncate: supposed to be 15, returned {}, size is {}", status, *size);
 
-    qfs.Close(fd);
+    qfs.Operation.Close(fd);
 }
 
 void TestFileSeek(QFS &qfs)
 {
     LogTest("Seek");
     const char *seekstr = "ori+00.cur+36.end-49.filler.filler.filler.cur-13.ori+28.";
-    int fd = qfs.Open("/seektest", O_CREAT | O_RDWR);
-    qfs.Write(fd, seekstr, strlen(seekstr));
+    int fd = qfs.Operation.Open("/seektest", QUASI_O_CREAT | QUASI_O_RDWR);
+    qfs.Operation.Write(fd, seekstr, strlen(seekstr));
 
     char buf[32];
 
-    qfs.LSeek(fd, 0, SeekOrigin::ORIGIN);
-    if (6 != qfs.Read(fd, buf, 6))
+    qfs.Operation.LSeek(fd, 0, SeekOrigin::ORIGIN);
+    if (6 != qfs.Operation.Read(fd, buf, 6))
         LogError("Can't read data for ORIGIN+00");
     TEST(strncmp(buf, "ori+00", 6) == 0, "Success: {}", "Fail: {}", "ORIGIN+00");
 
-    qfs.LSeek(fd, 8, SeekOrigin::CURRENT);
-    if (6 != qfs.Read(fd, buf, 6))
+    qfs.Operation.LSeek(fd, 8, SeekOrigin::CURRENT);
+    if (6 != qfs.Operation.Read(fd, buf, 6))
         LogError("Can't read data for CURRENT+08");
     TEST(strncmp(buf, "end-49", 6) == 0, "Success: {}", "Fail: {}", "CURRENT+08");
 
-    qfs.LSeek(fd, -49, SeekOrigin::END);
-    if (6 != qfs.Read(fd, buf, 6))
+    qfs.Operation.LSeek(fd, -49, SeekOrigin::END);
+    if (6 != qfs.Operation.Read(fd, buf, 6))
         LogError("Can't read data for END-49");
     TEST(strncmp(buf, "cur+36", 6) == 0, "Success: {}", "Fail: {}", "END-49");
 
-    qfs.LSeek(fd, 36, SeekOrigin::CURRENT);
-    if (6 != qfs.Read(fd, buf, 6))
+    qfs.Operation.LSeek(fd, 36, SeekOrigin::CURRENT);
+    if (6 != qfs.Operation.Read(fd, buf, 6))
         LogError("Can't read data for CURRENT+36");
     TEST(strncmp(buf, "ori+28", 6) == 0, "Success: {}", "Fail: {}", "CURRENT+36");
 
-    qfs.LSeek(fd, -13, SeekOrigin::CURRENT);
-    if (6 != qfs.Read(fd, buf, 6))
+    qfs.Operation.LSeek(fd, -13, SeekOrigin::CURRENT);
+    if (6 != qfs.Operation.Read(fd, buf, 6))
         LogError("Can't read data for CURRENT-10");
     TEST(strncmp(buf, "cur-13", 6) == 0, "Success: {}", "Fail: {}", "CURRENT-13");
 
     // no change to ptr (-100)
-    TEST(int status = qfs.LSeek(fd, -100, SeekOrigin::ORIGIN); status == -QUASI_EINVAL, "EINVAL ({}) {}", "{} {}", status, "on ORIGIN -OOB");
+    TEST(int status = qfs.Operation.LSeek(fd, -100, SeekOrigin::ORIGIN); -QUASI_EINVAL == status, "EINVAL ({}) {}", "{} {}", status, "on ORIGIN -OOB");
     // 100
-    TEST(int status = qfs.LSeek(fd, 100, SeekOrigin::ORIGIN); status == 100, "no error ({}) {}", "{} {}", status, "on ORIGIN +OOB");
+    TEST(int status = qfs.Operation.LSeek(fd, 100, SeekOrigin::ORIGIN); 100 == status, "no error ({}) {}", "{} {}", status, "on ORIGIN +OOB");
     // no change to ptr (-100)
-    TEST(int status = qfs.LSeek(fd, -200, SeekOrigin::CURRENT); status == -QUASI_EINVAL, "EINVAL ({}) {}", "{} {}", status, "on CURRENT -OOB");
+    TEST(int status = qfs.Operation.LSeek(fd, -200, SeekOrigin::CURRENT); -QUASI_EINVAL == status, "EINVAL ({}) {}", "{} {}", status, "on CURRENT -OOB");
     // 200
-    TEST(int status = qfs.LSeek(fd, 100, SeekOrigin::CURRENT); status == 200, "no error ({}) {}", "{} {}", status, "on CURRENT +OOB");
+    TEST(int status = qfs.Operation.LSeek(fd, 100, SeekOrigin::CURRENT); 200 == status, "no error ({}) {}", "{} {}", status, "on CURRENT +OOB");
     // no change to ptr (200)
-    TEST(int status = qfs.LSeek(fd, -100, SeekOrigin::END); status == -QUASI_EINVAL, "EINVAL ({}) {}", "{} {}", status, "on END -OOB");
+    TEST(int status = qfs.Operation.LSeek(fd, -100, SeekOrigin::END); -QUASI_EINVAL == status, "EINVAL ({}) {}", "{} {}", status, "on END -OOB");
     // 100 + file size
-    TEST(int status = qfs.LSeek(fd, 100, SeekOrigin::END); status == 100 + strlen(seekstr), "no error ({}) {}", "{} {}", status, "on END +OOB");
+    TEST(int status = qfs.Operation.LSeek(fd, 100, SeekOrigin::END); 100 + strlen(seekstr) == status, "no error ({}) {}", "{} {}", status, "on END +OOB");
 }
 
 //
@@ -1056,56 +1117,56 @@ void TestDirOpen(QFS &qfs)
 {
     LogTest("Dir open/close");
 
-    Resolved res{};
+    Resolved res;
 
-    if (int status = qfs.Open("/dir_open", O_DIRECTORY); -QUASI_ENOENT == status)
+    if (int status = qfs.Operation.Open("/dir_open", QUASI_O_DIRECTORY); -QUASI_ENOENT == status)
     {
-        LogSuccess("nonexistent dir, O_READ | O_DIRECTORY");
-        qfs.Close(status);
+        LogSuccess("nonexistent dir, QUASI_O_READ | QUASI_O_DIRECTORY");
+        qfs.Operation.Close(status);
     }
     else
-        LogError("nonexistent dir, O_READ | O_DIRECTORY: {}", status);
+        LogError("nonexistent dir, QUASI_O_READ | QUASI_O_DIRECTORY: {}", status);
 
-    if (int status = qfs.Open("/dir_open", O_DIRECTORY | O_WRONLY); -QUASI_ENOENT == status)
+    if (int status = qfs.Operation.Open("/dir_open", QUASI_O_DIRECTORY | QUASI_O_WRONLY); -QUASI_ENOENT == status)
     {
-        LogSuccess("nonexistent dir, O_WRONLY | O_DIRECTORY");
-        qfs.Close(status);
+        LogSuccess("nonexistent dir, QUASI_O_WRONLY | QUASI_O_DIRECTORY");
+        qfs.Operation.Close(status);
     }
     else
-        LogError("nonexistent dir, O_WRONLY | O_DIRECTORY: {}", status);
+        LogError("nonexistent dir, QUASI_O_WRONLY | QUASI_O_DIRECTORY: {}", status);
 
     //
-    qfs.MKDir("/dir_open");
+    qfs.Operation.MKDir("/dir_open");
     //
 
-    if (int status = qfs.Open("/dir_open", O_DIRECTORY); 0 < status)
+    if (int status = qfs.Operation.Open("/dir_open", QUASI_O_DIRECTORY); 0 < status)
     {
-        LogSuccess("existing dir, O_RDONLY | O_DIRECTORY");
-        qfs.Close(status);
+        LogSuccess("existing dir, QUASI_O_RDONLY | QUASI_O_DIRECTORY");
+        qfs.Operation.Close(status);
     }
     else
-        LogError("existing dir, O_RDONLY | O_DIRECTORY: {}", status);
+        LogError("existing dir, QUASI_O_RDONLY | QUASI_O_DIRECTORY: {}", status);
 
-    if (int status = qfs.Open("/dir_open", 0); 0 < status)
+    if (int status = qfs.Operation.Open("/dir_open", 0); 0 < status)
     {
-        LogSuccess("existing dir, O_RDONLY");
-        qfs.Close(status);
+        LogSuccess("existing dir, QUASI_O_RDONLY");
+        qfs.Operation.Close(status);
     }
     else
-        LogError("existing dir, O_RDONLY: {}", status);
+        LogError("existing dir, QUASI_O_RDONLY: {}", status);
 
     //
     // not implemented in host driver
-    qfs.Creat("/notadir");
+    qfs.Operation.Creat("/notadir");
     //
 
-    if (int status = qfs.Open("/notadir", O_DIRECTORY); -QUASI_ENOTDIR == status)
+    if (int status = qfs.Operation.Open("/notadir", QUASI_O_DIRECTORY); -QUASI_ENOTDIR == status)
     {
-        LogSuccess("not a dir, O_DIRECTORY");
-        qfs.Close(status);
+        LogSuccess("not a dir, QUASI_O_DIRECTORY");
+        qfs.Operation.Close(status);
     }
     else
-        LogError("not a dir, O_DIRECTORY: {}", status);
+        LogError("not a dir, QUASI_O_DIRECTORY: {}", status);
 }
 
 void TestDirOps(QFS &qfs) { UNIMPLEMENTED(); }

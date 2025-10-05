@@ -1,10 +1,10 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include <chrono>
 #include <filesystem>
 #include <vector>
-
-#include <sys/types.h>
 
 namespace QuasiFS
 {
@@ -44,6 +44,8 @@ namespace QuasiFS
     using symlink_ptr = std::shared_ptr<Symlink>;
     class Directory;
     using dir_ptr = std::shared_ptr<Directory>;
+    class Device;
+    using dev_ptr = std::shared_ptr<Device>;
 
     // resolve path into (parent_dir, leaf_name, inode)
     struct Resolved
@@ -54,30 +56,6 @@ namespace QuasiFS
         inode_ptr node{};           // leaf - very last element of the path (if exists, otherwise nullptr)
         std::string leaf{};         // leaf - name
     };
-
-    // sys/stat.h
-    struct quasi_stat_t
-    {
-        quasi_dev_t st_dev;     /* Device.  */
-        quasi_ino_t st_ino;     /* File serial number.	*/
-        quasi_nlink_t st_nlink; /* Link count.  */
-        quasi_mode_t st_mode;   /* File mode.  */
-                                //   __uid_t st_uid;		/* User ID of the file's owner.	*/
-                                //   __gid_t st_gid;		/* Group ID of the file's group.*/
-                                //   __dev_t st_rdev;		/* Device number, if device.  */
-        quasi_off_t st_size;    /* Size of file, in bytes.  */
-        blksize_t st_blksize;   /* Optimal block size for I/O.  */
-        blkcnt_t st_blocks;     /* Number 512-byte blocks allocated. */
-
-        struct timespec st_atim; /* Time of last access.  */
-        struct timespec st_mtim; /* Time of last modification.  */
-        struct timespec st_ctim; /* Time of last status change.  */
-#define st_atime st_atim.tv_sec  /* Backward compatibility.  */
-#define st_mtime st_mtim.tv_sec
-#define st_ctime st_ctim.tv_sec
-    };
-
-    // using Stat = struct quasi_stat_t;
 
     typedef struct File File;
     using fd_handle_ptr = std::shared_ptr<File>;

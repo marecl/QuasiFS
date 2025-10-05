@@ -1,8 +1,10 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include <unordered_map>
 
-#include "quasifs_types.h"
+#include "quasi_types.h"
 #include "../../log.h"
 
 namespace QuasiFS
@@ -45,15 +47,10 @@ namespace QuasiFS
         blkid_t GetBlkId(void) { return this->block_id; }
         inode_ptr GetInodeByFileno(fileno_t fileno);
 
-        int Resolve(fs::path &path,Resolved &res);
-
-        bool IndexInode(inode_ptr node);
-        int rmInode(fileno_t fileno);
-        int rmInode(inode_ptr node);
+        int Resolve(fs::path &path, Resolved &res);
 
         // create file at path (creates entry in parent dir). returns 0 or negative errno
-        int touch(dir_ptr parent, const std::string &name);
-        int touch(dir_ptr parent, const std::string &name, file_ptr child);
+        int touch(dir_ptr parent, const std::string &name, inode_ptr child);
 
         int mkdir(dir_ptr parent, const std::string &name);
         int mkdir(dir_ptr parent, const std::string &name, dir_ptr child);
@@ -61,10 +58,16 @@ namespace QuasiFS
         int rmdir(fs::path path);
         int rmdir(dir_ptr parent, const std::string &name);
 
-        static void mkrelative(dir_ptr parent, dir_ptr child);
-
         int link(inode_ptr source, dir_ptr destination_parent, const std::string &name);
-        int unlink(dir_ptr parent, const std::string &child);
+        int unlink(dir_ptr parent, const std::string &name);
+
+        static int chmod(inode_ptr target, mode_t mode);
+
+    private:
+        int rmInode(fileno_t fileno);
+        int rmInode(inode_ptr node);
+        bool IndexInode(inode_ptr node);
+        static void mkrelative(dir_ptr parent, dir_ptr child);
     };
 
 };

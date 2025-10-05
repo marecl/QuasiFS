@@ -2,6 +2,7 @@
 add_library(quasifs_lib
     quasifs.cpp
     quasifs_vdriver.cpp
+    quasifs_inode_device.cpp
     quasifs_inode_directory.cpp
     quasifs_inode_regularfile.cpp
     quasifs_inode_symlink.cpp

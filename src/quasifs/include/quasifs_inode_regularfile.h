@@ -1,6 +1,9 @@
+// INAA License @marecl 2025
+
 #pragma once
 
-#include "quasifs_types.h"
+#include "quasi_sys_stat.h"
+#include "quasi_types.h"
 #include "quasifs_inode.h"
 
 namespace QuasiFS
@@ -24,7 +27,7 @@ namespace QuasiFS
         //
         quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override;
         quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override;
-        int truncate(quasi_off_t length);
+        int ftruncate(quasi_off_t length) override;
 
         //
         // Mock functions

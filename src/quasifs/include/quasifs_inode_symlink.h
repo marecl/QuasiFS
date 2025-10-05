@@ -1,6 +1,8 @@
+// INAA License @marecl 2025
+
 #pragma once
 
-#include "quasifs_types.h"
+#include "quasi_types.h"
 #include "quasifs_inode.h"
 
 namespace QuasiFS

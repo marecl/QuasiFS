@@ -1,6 +1,7 @@
+// INAA License @marecl 2025
 
 #include "quasi_errno.h"
-#include "include/quasifs_types.h"
+#include "include/quasi_types.h"
 
 #include "include/quasifs.h"
 
@@ -42,7 +43,7 @@ namespace QuasiFS
     // mount fs at path (target must exist and be directory)
     int QFS::Mount(const fs::path &path, partition_ptr fs, unsigned int options)
     {
-        Resolved res{};
+        Resolved res;
         int status = Resolve(path, res);
 
         if (0 != status)
@@ -93,7 +94,7 @@ namespace QuasiFS
     // mount fs at path (target must exist and be directory)
     int QFS::Unmount(const fs::path &path)
     {
-        Resolved res{};
+        Resolved res;
         int status = Resolve(path, res);
 
         if (0 != status)
@@ -122,7 +123,19 @@ namespace QuasiFS
         return 0;
     }
 
-    int QFS::Resolve(const fs::path &path,Resolved &res)
+    int QFS::ForceInsert(const fs::path &path, const std::string &name, inode_ptr node)
+    {
+        // it's just one of those days
+        Resolved res;
+        int resolve_status = this->Resolve(path, res);
+        if (0 != resolve_status)
+            return resolve_status;
+        if (!res.node->is_dir())
+            return -QUASI_ENOTDIR;
+        return res.mountpoint->touch(std::static_pointer_cast<Directory>(res.node), name, node);
+    }
+
+    int QFS::Resolve(const fs::path &path, Resolved &res)
     {
         if (path.empty())
             return -QUASI_EINVAL;
@@ -142,7 +155,7 @@ namespace QuasiFS
 
         fs::path iter_path = path;
 
-       res.mountpoint = this->rootfs;
+        res.mountpoint = this->rootfs;
         res.local_path = iter_path;
         res.parent = this->root;
         res.node = this->root;
@@ -152,7 +165,7 @@ namespace QuasiFS
             if (iter_path.string().size() >= 256)
                 return -QUASI_ENAMETOOLONG;
 
-            status =res.mountpoint->Resolve(iter_path, res);
+            status = res.mountpoint->Resolve(iter_path, res);
 
             if (0 != status)
                 return status;
@@ -174,7 +187,7 @@ namespace QuasiFS
                 if (!leftover.empty())
                     iter_path /= leftover;
                 // reset everything to point to rootfs, where absolute path can be resolved again
-               res.mountpoint = this->rootfs;
+                res.mountpoint = this->rootfs;
                 res.parent = this->root;
                 res.node = this->root;
                 res.leaf = "/";
@@ -199,11 +212,11 @@ namespace QuasiFS
 
                     if (nullptr == mounted_partition)
                     {
-                       res.mountpoint = nullptr;
+                        res.mountpoint = nullptr;
                         return -QUASI_ENOENT;
                     }
 
-                   res.mountpoint = mounted_partition;
+                    res.mountpoint = mounted_partition;
                     res.parent = mntparent;
                     res.node = mntroot;
                     res.leaf = "/";
@@ -236,7 +249,7 @@ namespace QuasiFS
         fd_handle_ptr fh = this->GetHandle(fd);
         if (nullptr == fh)
             return -QUASI_EBADF;
-        return this->FTruncate(fd, size);
+        return this->Operation.FTruncate(fd, size);
     }
 
     quasi_ssize_t QFS::GetSize(const int fd) noexcept
@@ -291,7 +304,7 @@ namespace QuasiFS
                 fs::path parent_path = pp.parent_path();
                 fs::path leaf = pp.filename();
 
-                Resolved res{};
+                Resolved res;
                 part->Resolve(parent_path, res);
 
                 if (nullptr == res.node)
@@ -352,16 +365,16 @@ namespace QuasiFS
         return this->open_fd.at(fd);
     }
 
-    mount_t *QFS::GetPartitionInfo(partition_ptr part)
+    mount_t *QFS::GetPartitionInfo(const partition_ptr part)
     {
         auto target_part_info = this->block_devices.find(part);
         // already mounted
-        if (target_part_info == this->block_devices.end())
+        if (this->block_devices.end() == target_part_info)
             return nullptr;
         return &(target_part_info->second);
     }
 
-    partition_ptr QFS::GetPartitionByPath(fs::path path)
+    partition_ptr QFS::GetPartitionByPath(const fs::path &path)
     {
         for (auto &[part, info] : this->block_devices)
         {
@@ -371,7 +384,7 @@ namespace QuasiFS
         return nullptr;
     }
 
-    partition_ptr QFS::GetPartitionByParent(dir_ptr dir)
+    partition_ptr QFS::GetPartitionByParent(const dir_ptr dir)
     {
         for (auto &[part, info] : this->block_devices)
         {

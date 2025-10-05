@@ -1,3 +1,5 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include <memory>
@@ -15,29 +17,8 @@ using HostVIO = HostIODriver::HostIO_Virtual;
 #ifdef __linux__
 using HostIO = HostIODriver::HostIO_POSIX;
 #elif _WIN32
-#warning Contributors needed
+#error Contributors needed
 using HostIO = HostIODriver::HostIO_Win32;
 #else
 #warning This architecture isn't supported by HostIO
 #endif
-
-template <class T>
-class Singleton
-{
-public:
-    static T *Instance()
-    {
-        if (!m_instance)
-        {
-            m_instance = std::make_unique<T>();
-        }
-        return m_instance.get();
-    }
-
-protected:
-    Singleton();
-    ~Singleton();
-
-private:
-    static inline std::unique_ptr<T> m_instance{};
-};

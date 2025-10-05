@@ -1,17 +1,20 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include <filesystem>
 #include <system_error>
 
-#include <sys/types.h>
 #include <dirent.h>
 
-#include "../../quasifs/include/quasifs_types.h"
+#include "../../quasifs/include/quasi_types.h"
+#include "../../quasifs/include/quasi_sys_stat.h"
 
 namespace HostIODriver
 {
     namespace fs = std::filesystem;
     using namespace QuasiFS;
+    using namespace QuasiFS::Stat;
 
     class HostIO_Base
     {
@@ -45,9 +48,11 @@ namespace HostIODriver
         virtual int MKDir(const fs::path &path, quasi_mode_t mode = 0755);
         virtual int RMDir(const fs::path &path);
 
-        virtual int Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf);
-        virtual int FStat(const int fd, QuasiFS::quasi_stat_t *statbuf);
+        virtual int Stat(const fs::path &path, quasi_stat_t *statbuf);
+        virtual int FStat(const int fd, quasi_stat_t *statbuf);
 
+        virtual int Chmod(const fs::path &path, quasi_mode_t mode);
+        virtual int FChmod(const int fd, quasi_mode_t mode);
         //
         // Derived, complex functions are to be handled by main FS class
         //

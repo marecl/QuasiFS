@@ -1,9 +1,12 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include <map>
 #include <string>
 
-#include "quasifs_types.h"
+#include "quasi_sys_stat.h"
+#include "quasi_types.h"
 #include "quasifs_inode.h"
 
 namespace QuasiFS
@@ -24,6 +27,23 @@ namespace QuasiFS
             return std::make_shared<Directory>();
         }
 
+        //
+        // Inode overrides
+        //
+
+        virtual quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override { return -QUASI_EISDIR; }
+        virtual quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override { return -QUASI_EISDIR; }
+        virtual int fstat(quasi_stat_t *stat) override
+        {
+            this->st.st_size = entries.size() * 32;
+            *stat = st;
+            return 0;
+        }
+
+        //
+        // Dir-specific
+        //
+
         // Insert [child] directory with [name]
         int mkdir(const std::string &name, dir_ptr child);
 
@@ -36,7 +56,6 @@ namespace QuasiFS
         int unlink(const std::string &name);
         // list entries
         std::vector<std::string> list();
-        quasi_stat_t getattr();
     };
 
 }

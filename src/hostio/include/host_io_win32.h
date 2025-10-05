@@ -1,3 +1,5 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #ifdef _WIN32

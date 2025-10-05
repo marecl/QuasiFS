@@ -1,8 +1,10 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #ifdef __linux__
 
-#include "../../quasifs/include/quasifs_types.h"
+#include "../../quasifs/include/quasi_types.h"
 #include "../../quasifs/include/quasi_errno.h"
 
 #include "host_io_base.h"
@@ -78,8 +80,11 @@ namespace HostIODriver
         int MKDir(const fs::path &path, quasi_mode_t mode = 0755) override;
         int RMDir(const fs::path &path) override;
 
-        int Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf) override;
-        int FStat(const int fd, QuasiFS::quasi_stat_t *statbuf) override;
+        int Stat(const fs::path &path, quasi_stat_t *statbuf) override;
+        int FStat(const int fd, quasi_stat_t *statbuf) override;
+
+        int Chmod(const fs::path &path, quasi_mode_t mode) override;
+        int FChmod(const int fd, quasi_mode_t mode) override;
     };
 }
 

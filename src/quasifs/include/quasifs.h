@@ -1,9 +1,13 @@
+// INAA License @marecl 2025
+
 #pragma once
 
 #include <unordered_map>
 
+#include "quasi_sys_stat.h"
+#include "quasi_types.h"
+
 #include "../../hostio/include/host_io.h"
-#include "quasifs_types.h"
 
 /**
  * Wrapper class
@@ -12,10 +16,12 @@
 
 namespace QuasiFS
 {
+    using namespace Stat;
 
     // Very small QFS manager: path resolution, mount, create/unlink
-    class QFS : public HostIOBase
+    class QFS
     {
+    private:
         // root partition
         partition_ptr rootfs;
         // root directory of the root partition ("/")
@@ -31,6 +37,46 @@ namespace QuasiFS
 
         HostIO hio_driver{};
         HostVIO vio_driver{};
+
+        //
+        // Inherited from HostIOBase
+        // Native filesystem operations, here because top-level FS *must* interact with every step
+        // when in doubt - man(2)
+        //
+
+        class OperationImpl : public HostIO::HostIO_Base
+        {
+        private:
+            QFS &qfs;
+            OperationImpl &operator=(const OperationImpl &) = delete;
+
+        public:
+            OperationImpl(QFS &qfs) : qfs(qfs) {}
+            int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755) override;
+            int Creat(const fs::path &path, quasi_mode_t mode = 0755) override;
+            int Close(const int fd) override;
+            int LinkSymbolic(const fs::path &src, const fs::path &dst) override;
+            int Link(const fs::path &src, const fs::path &dst) override;
+            int Unlink(const fs::path &path) override;
+            int Flush(const int fd) override;
+            int FSync(const int fd) override;
+            int Truncate(const fs::path &path, quasi_size_t size) override;
+            int FTruncate(const int fd, quasi_size_t size) override;
+            quasi_off_t LSeek(const int fd, quasi_off_t offset, SeekOrigin origin) override;
+            quasi_ssize_t Tell(const int fd) override;
+            quasi_ssize_t Write(const int fd, const void *buf, quasi_size_t count) override;
+            quasi_ssize_t PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset) override;
+            quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count) override;
+            quasi_ssize_t PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset) override;
+            int MKDir(const fs::path &path, quasi_mode_t mode = 0755) override;
+            int RMDir(const fs::path &path) override;
+
+            int Stat(const fs::path &path, quasi_stat_t *statbuf) override;
+            int FStat(const int fd, quasi_stat_t *statbuf) override;
+
+            int Chmod(const fs::path &path, quasi_mode_t mode) override;
+            int FChmod(const int fd, quasi_mode_t mode) override;
+        };
 
     public:
         QFS(const fs::path &host_path = "");
@@ -51,6 +97,9 @@ namespace QuasiFS
         int Mount(const fs::path &path, partition_ptr fs, unsigned int options = MountOptions::MOUNT_NOOPT);
         // mount fs at path (target must exist and be directory)
         int Unmount(const fs::path &path);
+
+        // DON'T USE, this may or may not break stuff (duuun dun)
+        int ForceInsert(const fs::path &path, const std::string &name, inode_ptr node);
 
         /**
          * Resolve path
@@ -82,35 +131,7 @@ namespace QuasiFS
          *      * parent - holding dir that is a mountpoint (/dir/INODE->mounted_dir)
          *      * node - node holding mounted root (/dir/inode->MOUNTED_DIR)
          */
-        int Resolve(const fs::path &path,Resolved &res);
-
-        //
-        // Inherited from HostIOBase
-        // Raw file operations
-        // man(2)
-        //
-
-        int Open(const fs::path &path, int flags, quasi_mode_t mode = 0755);
-        int Creat(const fs::path &path, quasi_mode_t mode = 0755);
-        int Close(const int fd);
-        int LinkSymbolic(const fs::path &src, const fs::path &dst);
-        int Link(const fs::path &src, const fs::path &dst);
-        int Unlink(const fs::path &path);
-        // int Flush(const int fd);
-        // int FSync(const int fd);
-        int Truncate(const fs::path &path, quasi_size_t size);
-        int FTruncate(const int fd, quasi_size_t size);
-        quasi_off_t LSeek(const int fd, quasi_off_t offset, SeekOrigin origin);
-        quasi_ssize_t Tell(const int fd);
-        quasi_ssize_t Write(const int fd, const void *buf, quasi_size_t count);
-        quasi_ssize_t PWrite(const int fd, const void *buf, quasi_size_t count, quasi_off_t offset);
-        quasi_ssize_t Read(const int fd, void *buf, quasi_size_t count);
-        quasi_ssize_t PRead(const int fd, void *buf, quasi_size_t count, quasi_off_t offset);
-        int MKDir(const fs::path &path, quasi_mode_t mode = 0755);
-        int RMDir(const fs::path &path);
-
-        int Stat(const fs::path &path, quasi_stat_t *statbuf);
-        int FStat(const int fd, quasi_stat_t *statbuf);
+        int Resolve(const fs::path &path, Resolved &res);
 
         //
         // Additional binds
@@ -121,6 +142,13 @@ namespace QuasiFS
         quasi_ssize_t GetSize(const int fd) noexcept;
         // Not a port, used by 2-3 functions that ;
         quasi_ssize_t GetDirectorySize(const fs::path &path) noexcept;
+
+        //
+        // FS operations
+        // I think this class is huge already, so OG fs ops are moved to a separate "namespace"
+        //
+
+        OperationImpl Operation{*this};
 
         //
         // C++ ports with both except/noexcept
@@ -164,10 +192,10 @@ namespace QuasiFS
         fd_handle_ptr GetHandle(int fd);
         // partition by blkdev
         //  partition_ptr GetPartitionByBlockdev(uint64_t blkid);
-        mount_t *GetPartitionInfo(partition_ptr part);
-        partition_ptr GetPartitionByPath(fs::path path);
-        partition_ptr GetPartitionByParent(dir_ptr dir);
-        int IsPartitionRO(partition_ptr part);
+        mount_t *GetPartitionInfo(const partition_ptr part);
+        partition_ptr GetPartitionByPath(const fs::path &path);
+        partition_ptr GetPartitionByParent(const dir_ptr dir);
+        int IsPartitionRO(const partition_ptr part);
     };
 
 };

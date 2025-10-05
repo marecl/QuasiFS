@@ -1,3 +1,5 @@
+// INAA License @marecl 2025
+
 #include <cstdint>
 #include <cstdio>
 #include <dirent.h>
@@ -7,7 +9,7 @@
 #include <sys/stat.h>
 
 #include "../../quasifs/include/quasi_errno.h"
-#include "../../quasifs/include/quasifs_types.h"
+#include "../../quasifs/include/quasi_types.h"
 #include "../../quasifs/include/quasifs_inode_directory.h"
 #include "../../quasifs/include/quasifs_inode_regularfile.h"
 #include "../../quasifs/include/quasifs_inode_symlink.h"
@@ -37,28 +39,28 @@ namespace HostIODriver
     {
         errno = 0;
         int status = close(fd);
-        return status == 0 ? status : -errno;
+        return 0 == status ? status : -errno;
     }
 
     int HostIO_POSIX::LinkSymbolic(const fs::path &src, const fs::path &dst)
     {
         errno = 0;
         int status = symlink(src.c_str(), dst.c_str());
-        return status == 0 ? status : -errno;
+        return 0 == status ? status : -errno;
     }
 
     int HostIO_POSIX::Link(const fs::path &src, const fs::path &dst)
     {
         errno = 0;
         int status = link(src.c_str(), dst.c_str());
-        return status == 0 ? status : -errno;
+        return 0 == status ? status : -errno;
     }
 
     int HostIO_POSIX::Unlink(const fs::path &path)
     {
         errno = 0;
         int status = unlink(path.c_str());
-        return status == 0 ? status : -errno;
+        return 0 == status ? status : -errno;
     }
 
     int HostIO_POSIX::Flush(const int fd)
@@ -71,7 +73,7 @@ namespace HostIODriver
     {
         errno = 0;
         int status = fsync(fd);
-        return status == 0 ? status : -errno;
+        return 0 == status ? status : -errno;
     }
 
     int HostIO_POSIX::Truncate(const fs::path &path, quasi_size_t size)
@@ -132,14 +134,14 @@ namespace HostIODriver
     {
         errno = 0;
         int status = mkdir(path.c_str(), mode);
-        return status == 0 ? status : -errno;
+        return 0 == status ? status : -errno;
     }
 
     int HostIO_POSIX::RMDir(const fs::path &path)
     {
         errno = 0;
         int status = rmdir(path.c_str());
-        return status == 0 ? status : -errno;
+        return 0 == status ? status : -errno;
     }
 
     int HostIO_POSIX::Stat(const fs::path &path, QuasiFS::quasi_stat_t *statbuf)
@@ -191,4 +193,19 @@ namespace HostIODriver
 
         return 0;
     }
+
+    int HostIO_POSIX::Chmod(const fs::path &path, quasi_mode_t mode)
+    {
+        errno = 0;
+        int status = chmod(path.c_str(), mode);
+        return 0 == status ? status : -errno;
+    }
+
+    int HostIO_POSIX::FChmod(const int fd, quasi_mode_t mode)
+    {
+        errno = 0;
+        int status = fchmod(fd, mode);
+        return 0 == status ? status : -errno;
+    }
+
 }
