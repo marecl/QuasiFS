@@ -2,13 +2,13 @@
 
 #include <sys/sysmacros.h>
 
-#include "include/quasi_errno.h"
-#include "include/quasi_types.h"
+#include "../quasi_errno.h"
+#include "../quasi_types.h"
 
-#include "include/quasifs_partition.h"
-#include "include/quasifs_inode_directory.h"
-#include "include/quasifs_inode_regularfile.h"
-#include "include/quasifs_inode_symlink.h"
+#include "../quasifs_partition.h"
+#include "../quasifs_inode_directory.h"
+#include "../quasifs_inode_regularfile.h"
+#include "../quasifs_inode_symlink.h"
 
 namespace QuasiFS
 {
@@ -199,7 +199,13 @@ namespace QuasiFS
         return 0;
     }
 
-    // add inode at path (creates entry in parent dir). returns 0 or negative errno
+    template <typename T>
+        requires std::is_base_of_v<Inode, T>
+    int Partition::touch(dir_ptr parent, const std::string &name)
+    {
+        return touch(parent, name, T::Create());
+    }
+
     int Partition::touch(dir_ptr parent, const std::string &name, inode_ptr child)
     {
         if (nullptr == parent)

@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "include/quasifs_inode_regularfile.h"
+#include "../quasifs_inode_regularfile.h"
 
 namespace QuasiFS
 {

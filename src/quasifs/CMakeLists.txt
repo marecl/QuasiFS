@@ -1,12 +1,12 @@
 # QuasiFS
 add_library(quasifs_lib
-    quasifs.cpp
-    quasifs_vdriver.cpp
-    quasifs_inode_device.cpp
-    quasifs_inode_directory.cpp
-    quasifs_inode_regularfile.cpp
-    quasifs_inode_symlink.cpp
-    quasifs_partition.cpp    
+    src/quasifs.cpp
+    src/quasifs_vdriver.cpp
+    src/quasifs_inode_device.cpp
+    src/quasifs_inode_directory.cpp
+    src/quasifs_inode_regularfile.cpp
+    src/quasifs_inode_symlink.cpp
+    src/quasifs_partition.cpp    
     )
 
 target_include_directories(quasifs_lib

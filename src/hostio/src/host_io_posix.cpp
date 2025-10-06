@@ -8,15 +8,15 @@
 #include <sys/fcntl.h>
 #include <sys/stat.h>
 
-#include "../../quasifs/include/quasi_errno.h"
-#include "../../quasifs/include/quasi_types.h"
-#include "../../quasifs/include/quasifs_inode_directory.h"
-#include "../../quasifs/include/quasifs_inode_regularfile.h"
-#include "../../quasifs/include/quasifs_inode_symlink.h"
-#include "../../quasifs/include/quasifs_partition.h"
+#include "../../quasifs/quasi_errno.h"
+#include "../../quasifs/quasi_types.h"
+#include "../../quasifs/quasifs_inode_directory.h"
+#include "../../quasifs/quasifs_inode_regularfile.h"
+#include "../../quasifs/quasifs_inode_symlink.h"
+#include "../../quasifs/quasifs_partition.h"
 
 #include "host_io_base.h"
-#include "host_io_posix.h"
+#include "../host_io_posix.h"
 
 namespace HostIODriver
 {

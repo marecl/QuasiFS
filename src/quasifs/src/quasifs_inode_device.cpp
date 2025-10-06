@@ -1,6 +1,6 @@
 // INAA License @marecl 2025
 
-#include "include/quasifs_inode_device.h"
+#include "../quasifs_inode_device.h"
 
 namespace QuasiFS
 {

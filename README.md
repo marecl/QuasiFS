@@ -126,7 +126,7 @@ App may try to open malicious locations like `../../.bashrc` to have access to u
 ### Purely virtual
 
 ```
-#include "quasifs/include/quasifs.h"
+#include "quasifs/quasifs.h"
 
 int main() {
     QFS qfs;
@@ -145,7 +145,7 @@ This will place entire root in host-bound directory.
 If there are mountpoints within that directory, their contents will not be visible.
 
 ```
-#include "quasifs/include/quasifs.h"
+#include "quasifs/quasifs.h"
 
 int main() {
     // make sure this directory exists
@@ -166,7 +166,7 @@ int main() {
 You can pass host directory path in `Partition` constructor.
 
 ```
-#include "quasifs/include/quasifs.h"
+#include "quasifs/quasifs.h"
 
 int main() {
     QFS qfs;
@@ -176,7 +176,8 @@ int main() {
     partition_ptr host_partition = Partition::Create("host");
 
     // this skips permission checks, so it will be accessible
-    ro_partition->touch(ro_partition->GetRoot(), "rofile_old", RegularFile::Create());
+    ro_partition->touch<RegularFile>(ro_partition->GetRoot(), "rofile_old");
+    ro_partition->touch(ro_partition->GetRoot(), "rofile_different_old", RegularFile::Create());
 
     qfs.Operation.MKDir("/vdir");
     qfs.Operation.MKDir("/ro");

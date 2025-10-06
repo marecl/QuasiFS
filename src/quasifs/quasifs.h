@@ -7,7 +7,7 @@
 #include "quasi_sys_stat.h"
 #include "quasi_types.h"
 
-#include "../../hostio/include/host_io.h"
+#include "../hostio/host_io.h"
 
 /**
  * Wrapper class
@@ -94,11 +94,12 @@ namespace QuasiFS
         partition_ptr GetRootFS() { return this->rootfs; }
 
         // mount fs at path (target must exist and be directory)
+        // empty options imply read-only
         int Mount(const fs::path &path, partition_ptr fs, unsigned int options = MountOptions::MOUNT_NOOPT);
-        // mount fs at path (target must exist and be directory)
+        // unmount fs from path
         int Unmount(const fs::path &path);
 
-        // DON'T USE, this may or may not break stuff (duuun dun)
+        // may or may not break stuff (duuun dun)
         int ForceInsert(const fs::path &path, const std::string &name, inode_ptr node);
 
         /**

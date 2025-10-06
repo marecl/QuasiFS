@@ -1,9 +1,9 @@
 # Host IO
 add_library(host_io_lib
-    host_io_base.cpp
-    host_io_virtual.cpp
-    host_io_posix.cpp
-    host_io_win32.cpp
+    src/host_io_base.cpp
+    src/host_io_virtual.cpp
+    src/host_io_posix.cpp
+    src/host_io_win32.cpp
     )
 
 target_include_directories(host_io_lib

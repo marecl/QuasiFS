@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 
-#include "include/quasifs_inode_directory.h"
+#include "../quasifs_inode_directory.h"
 
 namespace QuasiFS
 {

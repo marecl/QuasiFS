@@ -7,10 +7,10 @@
 
 #include <dirent.h>
 
-#include "../../quasifs/include/quasi_types.h"
-#include "../../quasifs/include/quasi_errno.h"
+#include "../quasifs/quasi_types.h"
+#include "../quasifs/quasi_errno.h"
 
-#include "host_io_base.h"
+#include "src/host_io_base.h"
 
 namespace HostIODriver
 {

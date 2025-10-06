@@ -1,16 +1,16 @@
 // INAA License @marecl 2025
 
-#include "quasi_errno.h"
-#include "include/quasi_types.h"
+#include "../quasi_errno.h"
+#include "../quasi_types.h"
 
-#include "include/quasifs.h"
+#include "../quasifs.h"
 
-#include "include/quasifs_inode_directory.h"
-#include "include/quasifs_inode_regularfile.h"
-#include "include/quasifs_inode_symlink.h"
-#include "include/quasifs_partition.h"
+#include "../quasifs_inode_directory.h"
+#include "../quasifs_inode_regularfile.h"
+#include "../quasifs_inode_symlink.h"
+#include "../quasifs_partition.h"
 
-#include "../log.h"
+#include "../../log.h"
 
 namespace QuasiFS
 {

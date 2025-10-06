@@ -2,17 +2,17 @@
 
 #include <cstring>
 
-#include "include/quasi_sys_fcntl.h"
-#include "include/quasi_errno.h"
-#include "include/quasi_types.h"
+#include "../quasi_sys_fcntl.h"
+#include "../quasi_errno.h"
+#include "../quasi_types.h"
 
-#include "include/quasifs_inode_directory.h"
-#include "include/quasifs_inode_regularfile.h"
-#include "include/quasifs_inode_symlink.h"
-#include "include/quasifs_partition.h"
-#include "include/quasifs.h"
+#include "../quasifs_inode_directory.h"
+#include "../quasifs_inode_regularfile.h"
+#include "../quasifs_inode_symlink.h"
+#include "../quasifs_partition.h"
+#include "../quasifs.h"
 
-#include "../log.h"
+#include "../../log.h"
 
 namespace QuasiFS
 {

@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-#include "../../quasifs/include/quasifs_inode_device.h"
+#include "../../quasifs/quasifs_inode_device.h"
 
 namespace Devices
 {

@@ -7,8 +7,8 @@
 
 #include <dirent.h>
 
-#include "../../quasifs/include/quasi_types.h"
-#include "../../quasifs/include/quasi_sys_stat.h"
+#include "../../quasifs/quasi_types.h"
+#include "../../quasifs/quasi_sys_stat.h"
 
 namespace HostIODriver
 {

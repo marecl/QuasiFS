@@ -2,13 +2,13 @@
 
 #pragma once
 
-#include "quasifs/include/quasifs_inode_directory.h"
-#include "quasifs/include/quasifs_inode_regularfile.h"
-#include "quasifs/include/quasifs_inode_symlink.h"
-#include "quasifs/include/quasifs_partition.h"
-#include "quasifs/include/quasifs.h"
+#include "quasifs/quasifs_inode_directory.h"
+#include "quasifs/quasifs_inode_regularfile.h"
+#include "quasifs/quasifs_inode_symlink.h"
+#include "quasifs/quasifs_partition.h"
+#include "quasifs/quasifs.h"
 
-#include "quasifs/include/quasi_sys_fcntl.h"
+#include "quasifs/quasi_sys_fcntl.h"
 
 #include "../../dev/include/dev_std.h"
 #include "log.h"

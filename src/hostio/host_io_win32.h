@@ -7,7 +7,8 @@
 // #error unimplemented
 
 #include <cstdint>
-#include "host_io_virtual.h"
+#include "host_io_base.h"
+
 namespace HostIODriver
 {
     class HostIO_Win32
