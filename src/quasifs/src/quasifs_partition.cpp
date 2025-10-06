@@ -1,7 +1,5 @@
 // INAA License @marecl 2025
 
-#include <sys/sysmacros.h>
-
 #include "../quasi_errno.h"
 #include "../quasi_types.h"
 
@@ -9,6 +7,8 @@
 #include "../quasifs_inode_directory.h"
 #include "../quasifs_inode_regularfile.h"
 #include "../quasifs_inode_symlink.h"
+
+#include "../../log.h"
 
 namespace QuasiFS
 {
@@ -197,13 +197,6 @@ namespace QuasiFS
         }
 
         return 0;
-    }
-
-    template <typename T>
-        requires std::is_base_of_v<Inode, T>
-    int Partition::touch(dir_ptr parent, const std::string &name)
-    {
-        return touch(parent, name, T::Create());
     }
 
     int Partition::touch(dir_ptr parent, const std::string &name, inode_ptr child)

@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "quasi_sys_stat.h"
 #include "quasi_types.h"
 #include "quasifs_inode.h"
 

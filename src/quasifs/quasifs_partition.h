@@ -5,7 +5,6 @@
 #include <unordered_map>
 
 #include "quasi_types.h"
-#include "../log.h"
 
 namespace QuasiFS
 {
@@ -52,7 +51,10 @@ namespace QuasiFS
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         template <typename T>
             requires std::is_base_of_v<Inode, T>
-        int touch(dir_ptr parent, const std::string &name);
+        int touch(dir_ptr parent, const std::string &name)
+        {
+            return touch(parent, name, T::Create());
+        }
         int touch(dir_ptr parent, const std::string &name, inode_ptr child);
 
         int mkdir(dir_ptr parent, const std::string &name);
