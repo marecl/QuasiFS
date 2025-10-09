@@ -15,6 +15,45 @@
 
 using namespace QuasiFS;
 
+std::string file_mode(quasi_mode_t mode)
+{
+    std::string s;
+
+    if (QUASI_S_ISREG(mode))
+        s += '-';
+    else if (QUASI_S_ISDIR(mode))
+        s += 'd';
+    else if (QUASI_S_ISLNK(mode))
+        s += 'l';
+    else if (QUASI_S_ISCHR(mode))
+        s += 'c';
+    else if (QUASI_S_ISBLK(mode))
+        s += 'b';
+    else if (QUASI_S_ISFIFO(mode))
+        s += 'p';
+    else if (QUASI_S_ISSOCK(mode))
+        s += 's';
+    else
+        s += '?';
+
+    // owner
+    s += (mode & QUASI_S_IRUSR) ? 'r' : '-';
+    s += (mode & QUASI_S_IWUSR) ? 'w' : '-';
+    s += (mode & QUASI_S_IXUSR) ? 'x' : '-';
+
+    // group
+    s += (mode & QUASI_S_IRGRP) ? 'r' : '-';
+    s += (mode & QUASI_S_IWGRP) ? 'w' : '-';
+    s += (mode & QUASI_S_IXGRP) ? 'x' : '-';
+
+    // other
+    s += (mode & QUASI_S_IROTH) ? 'r' : '-';
+    s += (mode & QUASI_S_IWOTH) ? 'w' : '-';
+    s += (mode & QUASI_S_IXOTH) ? 'x' : '-';
+
+    return s;
+}
+
 void _printTree(const inode_ptr &node, const std::string &name, int depth)
 {
 
@@ -38,25 +77,31 @@ void _printTree(const inode_ptr &node, const std::string &name, int depth)
 
     if (!name.empty())
     {
-        std::cout << std::format("[{:3s}]\t", type) << std::format("[{:3d}]\t", node->fileno) << std::format("[{:3d}]\t", node->st.st_nlink) << depEnt << name;
-        if (node->is_link())
-            std::cout << "\t->\t" << std::static_pointer_cast<Symlink>(node)->follow();
-        std::cout << std::endl;
+        auto st = node->st;
+        char timebuf[64];
+        std::tm *t = std::localtime(&st.st_mtime);
+        std::strftime(timebuf, sizeof(timebuf), "%EY-%m-%d %H:%M", t);
+        // TODO: UID/GID
+
+        LogCustom("ls -la", "", "{} {:08} {:03d} {}:{} {:>08} {}\t{}{}", file_mode(st.st_mode), st.st_mode, st.st_nlink, /*st.st_uid*/ 0, /* st.st_gid*/ 0, st.st_size, timebuf, depEnt, name);
     }
     else
         depth--;
 
-    if ("." == name)
-        return;
-    if (".." == name)
-        return;
+    if (node->is_link())
+        LogCustom("ls -la", "", "\t\t\t\t\t\t\t\tsymlinked to ->{}", std::static_pointer_cast<Symlink>(node)->follow().string());
 
     if (node->is_dir())
     {
+        if ("." == name)
+            return;
+        if (".." == name)
+            return;
+
         auto dir = std::dynamic_pointer_cast<Directory>(node);
         if (dir->mounted_root)
         {
-            std::cout << "\t\t\t" << depEnt << "[MOUNTPOINT]" << std::endl;
+            LogCustom("ls -la", "", "\t\t\t\t\t\t\t\t|--{}{}", depEnt, "[MOUNTPOINT]");
             _printTree(dir->mounted_root, "", depth + 1);
         }
         else
