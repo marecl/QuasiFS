@@ -303,10 +303,7 @@ namespace QuasiFS
         if (nullptr == target)
             return -QUASI_EINVAL;
 
-        quasi_mode_t *st_mode = &target->st.st_mode;
-        *st_mode = ((*st_mode) & (~0x1FF)) | (mode & 0x1FF);
-
-        return 0;
+        return target->chmod(mode);
     }
 
     int Partition::rmInode(fileno_t fileno)

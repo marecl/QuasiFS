@@ -1,6 +1,6 @@
 // INAA License @marecl 2025
 
-#include "quasifs/include/quasifs.h"
+#include "quasifs/quasifs.h"
 
 #include "log.h"
 #include "tests.h"

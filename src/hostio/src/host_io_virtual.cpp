@@ -45,6 +45,7 @@ namespace HostIODriver
                 return -QUASI_ENOENT;
 
             target = RegularFile::Create();
+            target->chmod(mode);
             if (0 != part->touch(parent, this->res->leaf, target))
                 // touch failed in target directory, issue with resolve() most likely
                 return -QUASI_EFAULT;

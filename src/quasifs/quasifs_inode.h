@@ -61,6 +61,13 @@ namespace QuasiFS
 
         fileno_t fileno{-1};
         quasi_stat_t st{};
+
+        int chmod(quasi_mode_t mode)
+        {
+            quasi_mode_t *st_mode = &this->st.st_mode;
+            *st_mode = ((*st_mode) & (~0x1FF)) | (mode & 0x1FF);
+            return 0;
+        }
     };
 
 }
