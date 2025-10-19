@@ -45,6 +45,8 @@ namespace HostIODriver
         static constexpr int ToPOSIXOpenFlags(int quasi_flags)
         {
             int flags = 0;
+            if (quasi_flags | QUASI_O_ACCMODE)
+                flags |= O_ACCMODE;
             if (quasi_flags | QUASI_O_RDONLY)
                 flags |= O_RDONLY;
             if (quasi_flags | QUASI_O_WRONLY)
@@ -55,22 +57,42 @@ namespace HostIODriver
                 flags |= O_CREAT;
             if (quasi_flags | QUASI_O_EXCL)
                 flags |= O_EXCL;
+            if (quasi_flags | QUASI_O_NOCTTY)
+                flags |= O_NOCTTY;
             if (quasi_flags | QUASI_O_TRUNC)
                 flags |= O_TRUNC;
             if (quasi_flags | QUASI_O_APPEND)
                 flags |= O_APPEND;
             if (quasi_flags | QUASI_O_NONBLOCK)
                 flags |= O_NONBLOCK;
+            if (quasi_flags | QUASI_O_NDELAY)
+                flags |= O_NDELAY;
             if (quasi_flags | QUASI_O_SYNC)
                 flags |= O_SYNC;
             if (quasi_flags | QUASI_O_FSYNC)
                 flags |= O_FSYNC;
+            if (quasi_flags | QUASI_O_ASYNC)
+                flags |= O_ASYNC;
+            if (quasi_flags | QUASI_O_LARGEFILE)
+                flags |= O_LARGEFILE;
             if (quasi_flags | QUASI_O_DIRECTORY)
                 flags |= O_DIRECTORY;
+            if (quasi_flags | QUASI_O_NOFOLLOW)
+                flags |= O_NOFOLLOW;
+            if (quasi_flags | QUASI_O_CLOEXEC)
+                flags |= O_CLOEXEC;
             if (quasi_flags | QUASI_O_DIRECT)
                 flags |= O_DIRECT;
+            if (quasi_flags | QUASI_O_NOATIME)
+                flags |= O_NOATIME;
+            if (quasi_flags | QUASI_O_PATH)
+                flags |= O_PATH;
+            if (quasi_flags | QUASI_O_TMPFILE)
+                flags |= O_TMPFILE;
             if (quasi_flags | QUASI_O_DSYNC)
                 flags |= O_DSYNC;
+            if (quasi_flags | QUASI_O_RSYNC)
+                flags |= O_RSYNC;
 
             return flags;
         }
