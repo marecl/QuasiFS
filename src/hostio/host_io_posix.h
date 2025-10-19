@@ -6,7 +6,8 @@
 
 #include "../quasifs/quasi_types.h"
 #include "../quasifs/quasi_errno.h"
-
+#include "../quasifs/quasi_sys_fcntl.h"
+#include <sys/fcntl.h>
 #include "src/host_io_base.h"
 
 namespace HostIODriver
@@ -43,7 +44,35 @@ namespace HostIODriver
 
         static constexpr int ToPOSIXOpenFlags(int quasi_flags)
         {
-            return quasi_flags;
+            int flags = 0;
+            if (quasi_flags | QUASI_O_RDONLY)
+                flags |= O_RDONLY;
+            if (quasi_flags | QUASI_O_WRONLY)
+                flags |= O_WRONLY;
+            if (quasi_flags | QUASI_O_RDWR)
+                flags |= O_RDWR;
+            if (quasi_flags | QUASI_O_CREAT)
+                flags |= O_CREAT;
+            if (quasi_flags | QUASI_O_EXCL)
+                flags |= O_EXCL;
+            if (quasi_flags | QUASI_O_TRUNC)
+                flags |= O_TRUNC;
+            if (quasi_flags | QUASI_O_APPEND)
+                flags |= O_APPEND;
+            if (quasi_flags | QUASI_O_NONBLOCK)
+                flags |= O_NONBLOCK;
+            if (quasi_flags | QUASI_O_SYNC)
+                flags |= O_SYNC;
+            if (quasi_flags | QUASI_O_FSYNC)
+                flags |= O_FSYNC;
+            if (quasi_flags | QUASI_O_DIRECTORY)
+                flags |= O_DIRECTORY;
+            if (quasi_flags | QUASI_O_DIRECT)
+                flags |= O_DIRECT;
+            if (quasi_flags | QUASI_O_DSYNC)
+                flags |= O_DSYNC;
+
+            return flags;
         }
 
         static constexpr mode_t ToPOSIXOpenMode(quasi_mode_t quasi_mode)

@@ -50,10 +50,11 @@ namespace QuasiFS
 
         // create file at path (creates entry in parent dir). returns 0 or negative errno
         template <typename T>
-            requires std::is_base_of_v<Inode, T>
         int touch(dir_ptr parent, const std::string &name)
         {
-            return touch(parent, name, T::Create());
+            if constexpr (!std::is_base_of_v<Inode, T>)
+                return touch(parent, name, T::Create());
+            static_assert(std::is_base_of_v<Inode, T>, " QuasiFS:Partition:Touch Created element must derive from Inode");
         }
         int touch(dir_ptr parent, const std::string &name, inode_ptr child);
 

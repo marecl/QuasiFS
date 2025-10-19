@@ -6,6 +6,9 @@
 
 #include "quasi_sys_stat.h"
 #include "quasi_types.h"
+#include "quasifs_inode.h"
+#include "quasifs_inode_directory.h"
+#include "quasifs_inode_symlink.h"
 
 #include "../hostio/host_io.h"
 
@@ -16,6 +19,12 @@
 
 namespace QuasiFS
 {
+    std::string file_mode(quasi_mode_t mode);
+
+    void _printTree(const inode_ptr &node, const std::string &name, int depth);
+
+    void printTree(const dir_ptr &node, const std::string &name, int depth = 0);
+
     using namespace Stat;
 
     // Very small QFS manager: path resolution, mount, create/unlink
@@ -88,6 +97,7 @@ namespace QuasiFS
 
         // Sync mounted partitions with host directories
         int SyncHost(void);
+        int SyncHost(fs::path path);
         // Return root directory
         dir_ptr GetRoot() { return this->root; }
         // Return root partition
@@ -133,6 +143,8 @@ namespace QuasiFS
          *      * node - node holding mounted root (/dir/inode->MOUNTED_DIR)
          */
         int Resolve(const fs::path &path, Resolved &res);
+
+        int GetHostPath(fs::path &output, const fs::path &path = "/");
 
         //
         // Additional binds
@@ -186,7 +198,7 @@ namespace QuasiFS
         bool CreateDirectories(const fs::path &path, std::error_code &ec, int mode = 0777) noexcept { return -QUASI_EINVAL; };
 
     private:
-        void SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix = "");
+        void SyncHostImpl(partition_ptr part);
 
         // Get next available fd slot
         int GetFreeHandleNo();

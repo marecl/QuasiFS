@@ -24,6 +24,8 @@ namespace QuasiFS
 
     int Directory::link(const std::string &name, inode_ptr child)
     {
+        if (name.empty())
+            return -QUASI_ENOENT;
         if (entries.count(name))
             return -QUASI_EEXIST;
         entries[name] = child;
@@ -68,16 +70,4 @@ namespace QuasiFS
             r.push_back(p.first);
         return r;
     }
-
-    int Directory::mkdir(const std::string &name, dir_ptr child)
-    {
-        if (name.empty())
-            return -QUASI_ENOENT;
-        if (entries.count(name))
-            return -QUASI_EEXIST;
-        entries[name] = child;
-        child->st.st_nlink++;
-        return 0;
-    }
-
 }

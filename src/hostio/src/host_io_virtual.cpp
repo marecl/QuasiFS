@@ -73,14 +73,7 @@ namespace HostIODriver
             // opening dirs isn't supported yet
             return -QUASI_ENOTDIR;
 
-        if (flags & (QUASI_O_NOFOLLOW | QUASI_O_PATH /* | QUASI_O_TMPFILE */))
-        {
-            // QUASI_O_TMPFILE expansion includes QUASI_O_DIRECTORY
-            // not implemented
-            return -QUASI_EINVAL;
-        }
-
-        if (flags & (QUASI_O_NONBLOCK | QUASI_O_SYNC | QUASI_O_ASYNC | QUASI_O_CLOEXEC | QUASI_O_DIRECT | QUASI_O_DSYNC | QUASI_O_LARGEFILE | QUASI_O_NOATIME | QUASI_O_NOCTTY))
+        if (flags & (QUASI_O_NONBLOCK | QUASI_O_SYNC | QUASI_O_DIRECT | QUASI_O_DSYNC))
         {
             // unused, not affecting file manip per-se
         }

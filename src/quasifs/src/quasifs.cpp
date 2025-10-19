@@ -14,6 +14,99 @@
 
 namespace QuasiFS
 {
+    std::string file_mode(quasi_mode_t mode)
+    {
+        std::string s;
+
+        if (QUASI_S_ISREG(mode))
+            s += '-';
+        else if (QUASI_S_ISDIR(mode))
+            s += 'd';
+        else if (QUASI_S_ISLNK(mode))
+            s += 'l';
+        else if (QUASI_S_ISCHR(mode))
+            s += 'c';
+        else if (QUASI_S_ISBLK(mode))
+            s += 'b';
+        else if (QUASI_S_ISFIFO(mode))
+            s += 'p';
+        else if (QUASI_S_ISSOCK(mode))
+            s += 's';
+        else
+            s += '?';
+
+        // owner
+        s += (mode & QUASI_S_IRUSR) ? 'r' : '-';
+        s += (mode & QUASI_S_IWUSR) ? 'w' : '-';
+        s += (mode & QUASI_S_IXUSR) ? 'x' : '-';
+
+        // group
+        s += (mode & QUASI_S_IRGRP) ? 'r' : '-';
+        s += (mode & QUASI_S_IWGRP) ? 'w' : '-';
+        s += (mode & QUASI_S_IXGRP) ? 'x' : '-';
+
+        // other
+        s += (mode & QUASI_S_IROTH) ? 'r' : '-';
+        s += (mode & QUASI_S_IWOTH) ? 'w' : '-';
+        s += (mode & QUASI_S_IXOTH) ? 'x' : '-';
+
+        return s;
+    }
+
+    void _printTree(const inode_ptr &node, const std::string &name, int depth)
+    {
+
+        std::string depEnt = "";
+        for (uint8_t q = 0; q < depth; q++)
+        {
+            depEnt = depEnt + "|--";
+        }
+        if (depth > 0)
+            depEnt[depEnt.length() - 1] = '>';
+
+        if (!name.empty())
+        {
+            auto st = node->st;
+            char timebuf[64];
+            std::tm *t = std::localtime(&st.st_mtime);
+            std::strftime(timebuf, sizeof(timebuf), "%EY-%m-%d %H:%M", t);
+            // TODO: UID/GID
+
+            std::cout << "[ls -la] " << std::format("{} {:08} {:03d} {}:{} {:>08} {}\t{}{}\n", file_mode(st.st_mode), st.st_mode, st.st_nlink, /*st.st_uid*/ 0, /* st.st_gid*/ 0, st.st_size, timebuf, depEnt, name);
+        }
+        else
+            depth--;
+
+        if (node->is_link())
+            std::cout << "[ls -la] " << std::format("\t\t\t\t\t\t\tsymlinked to ->{}\n", std::static_pointer_cast<Symlink>(node)->follow().string());
+
+        if (node->is_dir())
+        {
+            if ("." == name)
+                return;
+            if (".." == name)
+                return;
+
+            auto dir = std::dynamic_pointer_cast<Directory>(node);
+            if (dir->mounted_root)
+            {
+                std::cout << "[ls -la] " << std::format("\t\t\t\t\t\t\t|--{}{}\n", depEnt, "[MOUNTPOINT]");
+                _printTree(dir->mounted_root, "", depth + 1);
+            }
+            else
+            {
+                for (auto &[childName, child] : dir->entries)
+                {
+                    _printTree(child, childName, depth + 1);
+                }
+            }
+        }
+    }
+
+    void printTree(const dir_ptr &node, const std::string &name, int depth)
+    {
+        _printTree(node, name, depth);
+    }
 
     QFS::QFS(const fs::path &host_path)
     {
@@ -34,8 +127,24 @@ namespace QuasiFS
         for (auto &[part, info] : this->block_devices)
         {
             if (part->IsHostMounted())
-                SyncHostImpl(part, "/");
+                SyncHostImpl(part);
         }
+
+        return 0;
+    }
+
+    int QFS::SyncHost(fs::path path)
+    {
+        Resolved res;
+        int status = Resolve(path, res);
+
+        if (0 != status)
+            return -QUASI_ENOENT;
+
+        if (nullptr == res.mountpoint)
+            return -QUASI_ENOMEDIUM;
+
+        SyncHostImpl(res.mountpoint);
 
         return 0;
     }
@@ -236,6 +345,16 @@ namespace QuasiFS
         return 0;
     }
 
+    int QFS::GetHostPath(fs::path &output, const fs::path &path)
+    {
+        Resolved res;
+        int status = Resolve(path, res);
+        if (status != 0)
+            return status;
+
+        return res.mountpoint->GetHostPath(output, res.local_path);
+    }
+
     bool QFS::IsOpen(const int fd) noexcept
     {
         fd_handle_ptr fh = this->GetHandle(fd);
@@ -273,7 +392,7 @@ namespace QuasiFS
     // Privates (don't touch)
     //
 
-    void QFS::SyncHostImpl(partition_ptr part, const fs::path &dir, std::string prefix)
+    void QFS::SyncHostImpl(partition_ptr part)
     {
         fs::path host_path{};
         if (0 != part->GetHostPath(host_path))
@@ -298,7 +417,6 @@ namespace QuasiFS
         {
             for (auto entry = fs::recursive_directory_iterator(host_path); entry != fs::recursive_directory_iterator(); entry++)
             {
-                // wcięcie zależne od głębokości
                 fs::path entry_path = entry->path();
                 fs::path pp = "/" / slice_path(entry->path());
                 fs::path parent_path = pp.parent_path();

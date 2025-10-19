@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include <iostream>
+#include <fstream>
+
 #include "quasifs/quasifs_inode_directory.h"
 #include "quasifs/quasifs_inode_regularfile.h"
 #include "quasifs/quasifs_inode_symlink.h"
@@ -15,111 +18,6 @@
 
 using namespace QuasiFS;
 
-std::string file_mode(quasi_mode_t mode)
-{
-    std::string s;
-
-    if (QUASI_S_ISREG(mode))
-        s += '-';
-    else if (QUASI_S_ISDIR(mode))
-        s += 'd';
-    else if (QUASI_S_ISLNK(mode))
-        s += 'l';
-    else if (QUASI_S_ISCHR(mode))
-        s += 'c';
-    else if (QUASI_S_ISBLK(mode))
-        s += 'b';
-    else if (QUASI_S_ISFIFO(mode))
-        s += 'p';
-    else if (QUASI_S_ISSOCK(mode))
-        s += 's';
-    else
-        s += '?';
-
-    // owner
-    s += (mode & QUASI_S_IRUSR) ? 'r' : '-';
-    s += (mode & QUASI_S_IWUSR) ? 'w' : '-';
-    s += (mode & QUASI_S_IXUSR) ? 'x' : '-';
-
-    // group
-    s += (mode & QUASI_S_IRGRP) ? 'r' : '-';
-    s += (mode & QUASI_S_IWGRP) ? 'w' : '-';
-    s += (mode & QUASI_S_IXGRP) ? 'x' : '-';
-
-    // other
-    s += (mode & QUASI_S_IROTH) ? 'r' : '-';
-    s += (mode & QUASI_S_IWOTH) ? 'w' : '-';
-    s += (mode & QUASI_S_IXOTH) ? 'x' : '-';
-
-    return s;
-}
-
-void _printTree(const inode_ptr &node, const std::string &name, int depth)
-{
-
-    std::string depEnt = "";
-    for (uint8_t q = 0; q < depth; q++)
-    {
-        depEnt = depEnt + "|--";
-    }
-    if (depth > 0)
-        depEnt[depEnt.length() - 1] = '>';
-
-    std::string type = "UNK";
-    if (node->is_dir())
-        type = "DIR";
-    if (node->is_file())
-        type = "FIL";
-    if (node->is_link())
-        type = "LNK";
-    if (node->is_char())
-        type = "CHR";
-
-    if (!name.empty())
-    {
-        auto st = node->st;
-        char timebuf[64];
-        std::tm *t = std::localtime(&st.st_mtime);
-        std::strftime(timebuf, sizeof(timebuf), "%EY-%m-%d %H:%M", t);
-        // TODO: UID/GID
-
-        LogCustom("ls -la", "", "{} {:08} {:03d} {}:{} {:>08} {}\t{}{}", file_mode(st.st_mode), st.st_mode, st.st_nlink, /*st.st_uid*/ 0, /* st.st_gid*/ 0, st.st_size, timebuf, depEnt, name);
-    }
-    else
-        depth--;
-
-    if (node->is_link())
-        LogCustom("ls -la", "", "\t\t\t\t\t\t\t\tsymlinked to ->{}", std::static_pointer_cast<Symlink>(node)->follow().string());
-
-    if (node->is_dir())
-    {
-        if ("." == name)
-            return;
-        if (".." == name)
-            return;
-
-        auto dir = std::dynamic_pointer_cast<Directory>(node);
-        if (dir->mounted_root)
-        {
-            LogCustom("ls -la", "", "\t\t\t\t\t\t\t\t|--{}{}", depEnt, "[MOUNTPOINT]");
-            _printTree(dir->mounted_root, "", depth + 1);
-        }
-        else
-        {
-            for (auto &[childName, child] : dir->entries)
-            {
-                _printTree(child, childName, depth + 1);
-            }
-        }
-    }
-}
-
-void printTree(const inode_ptr &node, const std::string &name, int depth = 0)
-{
-    std::cout << "Type\tFileno\tnlink\ttree" << std::endl;
-    _printTree(node, name, depth);
-}
-
 // Path resolution
 void TestResolve(QFS &qfs);
 
@@ -131,6 +29,30 @@ void TestMkRmdir(QFS &qfs);
 void TestMount(QFS &qfs);
 void TestMountFileRetention(QFS &qfs);
 void TestMountRO(QFS &qfs);
+void TestSync(QFS &qfs)
+{
+    LogTest("Sync host FS to QuasiFS");
+    LogError("Finish this one");
+    
+    if (fs::exists("sync"))
+        fs::remove_all("sync");
+
+    fs::create_directory("sync");
+    fs::create_directories("sync/a/b");
+    fs::create_directories("sync/c/d");
+
+    std::ofstream file;
+    file.open("sync/1.txt");
+    file.close();
+    file.open("sync/a/1.txt");
+    file.close();
+
+    auto part = Partition::Create("sync");
+
+    qfs.Operation.MKDir("/sync");
+    qfs.Mount("/sync", part, MountOptions::MOUNT_NOOPT);
+    qfs.SyncHost("/sync");
+}
 
 // Links
 void TestStLinkFile(QFS &qfs);
@@ -234,6 +156,7 @@ void Test(QFS &qfs)
     TestMount(qfs);
     TestMountFileRetention(qfs);
     TestMountRO(qfs);
+    TestSync(qfs);
 
     // Links
     TestStLinkFile(qfs);

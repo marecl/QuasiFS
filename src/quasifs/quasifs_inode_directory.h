@@ -44,9 +44,6 @@ namespace QuasiFS
         // Dir-specific
         //
 
-        // Insert [child] directory with [name]
-        int mkdir(const std::string &name, dir_ptr child);
-
         // Find an element with [name]
         inode_ptr lookup(const std::string &name);
 

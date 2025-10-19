@@ -220,7 +220,7 @@ namespace QuasiFS
         if (nullptr == parent)
             return -QUASI_ENOENT;
 
-        int ret = parent->mkdir(name, child);
+        int ret = parent->link(name, child);
 
         if (ret == 0)
             IndexInode(child);
@@ -358,7 +358,7 @@ namespace QuasiFS
 
     void Partition::mkrelative(dir_ptr parent, dir_ptr child)
     {
-        child->mkdir(".", child);
-        child->mkdir("..", parent);
+        child->link(".", child);
+        child->link("..", parent);
     }
 };
