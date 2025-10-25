@@ -13,7 +13,7 @@ namespace QuasiFS
 {
 
     // Directory
-    class Directory : public Inode
+    class Directory final : public Inode
     {
     public:
         std::map<std::string, inode_ptr> entries{};
@@ -31,9 +31,10 @@ namespace QuasiFS
         // Inode overrides
         //
 
-        virtual quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override { return -QUASI_EISDIR; }
-        virtual quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override { return -QUASI_EISDIR; }
-        virtual int fstat(quasi_stat_t *stat) override
+        quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) override { return -QUASI_EISDIR; }
+        quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) override { return -QUASI_EISDIR; }
+        int ftruncate(quasi_off_t length) override { return -QUASI_EISDIR; }
+        int fstat(quasi_stat_t *stat) override
         {
             this->st.st_size = entries.size() * 32;
             *stat = st;

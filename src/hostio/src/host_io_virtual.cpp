@@ -10,6 +10,7 @@
 
 #include "../../quasifs/quasifs_inode_directory.h"
 #include "../../quasifs/quasifs_inode_regularfile.h"
+#include "../../quasifs/quasifs_inode_virtualfile.h"
 #include "../../quasifs/quasifs_inode_symlink.h"
 #include "../../quasifs/quasifs_inode_device.h"
 #include "../../quasifs/quasifs_partition.h"
@@ -44,7 +45,11 @@ namespace HostIODriver
             if ((flags & QUASI_O_CREAT) == 0)
                 return -QUASI_ENOENT;
 
-            target = RegularFile::Create();
+            if (this->host_bound)
+                target = QuasiFile::Create<RegularFile>();
+            else
+                target = QuasiFile::Create<VirtualFile>();
+
             target->chmod(mode);
             if (0 != part->touch(parent, this->res->leaf, target))
                 // touch failed in target directory, issue with resolve() most likely
@@ -57,12 +62,8 @@ namespace HostIODriver
 
         if (flags & QUASI_O_TRUNC)
         {
-            if (target->is_file())
-                std::static_pointer_cast<RegularFile>(target)->ftruncate(0);
-            else if (target->is_dir())
-                return -QUASI_EISDIR;
-            else
-                return -QUASI_EINVAL;
+            if (int status = target->ftruncate(0); status != 0)
+                return status;
         }
 
         // if exists and is a directory, can't be opened with any kind of write
@@ -89,7 +90,7 @@ namespace HostIODriver
             return -QUASI_ENOTDIR;
 
         dir_ptr parent = std::static_pointer_cast<Directory>(this->res->node);
-        file_ptr new_file = RegularFile::Create();
+        file_ptr new_file = this->host_bound ? QuasiFile::Create<RegularFile>() : QuasiFile::Create<VirtualFile>();
         return this->res->mountpoint->touch(parent, path.filename(), new_file);
     }
 
@@ -183,10 +184,7 @@ namespace HostIODriver
         if (!node->is_file())
             return -QUASI_EINVAL;
 
-        if (host_bound)
-            return std::static_pointer_cast<RegularFile>(handle->node)->MockTruncate(size);
-        else
-            return std::static_pointer_cast<RegularFile>(handle->node)->ftruncate(size);
+        return std::static_pointer_cast<RegularFile>(handle->node)->ftruncate(size);
     }
 
     int HostIO_Virtual::FTruncate(const int fd, quasi_size_t size)
@@ -205,10 +203,7 @@ namespace HostIODriver
         if (!node->is_file())
             return -QUASI_EINVAL;
 
-        if (host_bound)
-            return std::static_pointer_cast<RegularFile>(handle->node)->MockTruncate(size);
-        else
-            return std::static_pointer_cast<RegularFile>(handle->node)->ftruncate(size);
+        return std::static_pointer_cast<RegularFile>(handle->node)->ftruncate(size);
     }
 
     quasi_off_t HostIO_Virtual::LSeek(const int fd, quasi_off_t offset, QuasiFS::SeekOrigin origin)
@@ -263,16 +258,7 @@ namespace HostIODriver
         if (handle->append)
             offset = node->st.st_size;
 
-        ssize_t bw = 0;
-
-        if (this->host_bound && node->is_file())
-        {
-            bw = std::static_pointer_cast<RegularFile>(node)->MockWrite(offset, buf, count);
-        }
-        else
-            bw = node->write(offset, buf, count);
-
-        return bw;
+        return node->write(offset, buf, count);
     }
 
     quasi_ssize_t HostIO_Virtual::Read(const int fd, void *buf, quasi_size_t count)
@@ -294,9 +280,6 @@ namespace HostIODriver
 
         if (nullptr == node)
             return -QUASI_EBADF;
-
-        if (this->host_bound && node->is_file())
-            return std::static_pointer_cast<RegularFile>(node)->MockRead(offset, buf, count);
 
         return node->read(offset, buf, count);
     }

@@ -35,8 +35,8 @@ namespace QuasiFS
         partition_ptr part = res.mountpoint;
         dir_ptr parent_node = std::static_pointer_cast<Directory>(res.parent);
 
-        bool request_read = !(flags & QUASI_O_WRONLY) | QUASI_O_RDWR;
-        bool request_write = flags & (QUASI_O_WRONLY | QUASI_O_RDWR);
+        bool request_read = !(flags & QUASI_O_WRONLY) || (flags & QUASI_O_RDWR);
+        bool request_write = (flags & (QUASI_O_WRONLY | QUASI_O_RDWR)) != 0;
         bool request_append = flags & QUASI_O_APPEND;
 
         //
@@ -50,9 +50,11 @@ namespace QuasiFS
         // if it doesn't exist, check the parent
         inode_ptr checked_node = nullptr == res.node ? parent_node : res.node;
 
-        if ((request_read && !checked_node->CanRead()) ||
-            (request_write && !checked_node->CanWrite()))
+        if ((request_read && !checked_node->CanRead()) || (request_write && !checked_node->CanWrite()))
             return -QUASI_EACCES;
+
+        if ((flags & (QUASI_O_WRONLY | QUASI_O_RDWR)) == (QUASI_O_WRONLY | QUASI_O_RDWR))
+            return -QUASI_EINVAL;
 
         //
         // Proceed
@@ -78,7 +80,8 @@ namespace QuasiFS
         vio_status = qfs.vio_driver.Open(res.local_path, flags, mode);
         qfs.vio_driver.ClearCtx();
 
-        if (int tmp_hio_status = hio_status >= 0 ? 0 : hio_status; host_used && (tmp_hio_status != vio_status))
+        if (int tmp_hio_status = hio_status >= 0 ? 0 : hio_status;
+            host_used && (tmp_hio_status != vio_status))
             LogError("Host returned {}, but virtual driver returned {}", hio_status, vio_status);
 
         if (vio_status < 0)

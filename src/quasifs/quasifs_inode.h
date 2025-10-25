@@ -18,11 +18,6 @@ namespace QuasiFS
         Inode() = default;
         virtual ~Inode() = default;
 
-        static inode_ptr Create(void)
-        {
-            return std::make_shared<Inode>();
-        }
-
         // ioctl(unsigned long op, ...);
         virtual quasi_ssize_t read(quasi_off_t offset, void *buf, quasi_size_t count) { return -QUASI_ENOSYS; }
         virtual quasi_ssize_t write(quasi_off_t offset, const void *buf, quasi_size_t count) { return -QUASI_ENOSYS; }

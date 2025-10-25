@@ -441,7 +441,7 @@ namespace QuasiFS
                 }
                 else if (entry->is_regular_file())
                 {
-                    new_inode = RegularFile::Create();
+                    new_inode = QuasiFile::Create<RegularFile>();
                     part->touch(parent_dir, leaf, std::static_pointer_cast<RegularFile>(new_inode));
                 }
                 else
